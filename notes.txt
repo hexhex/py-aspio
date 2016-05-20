@@ -1,0 +1,7 @@
+Packaging
+=========
+
+* https://wiki.python.org/moin/PythonPackagingTerminology
+
+* About namespace packages in python 3.3 and later:
+  http://stackoverflow.com/a/27586272/1889401
