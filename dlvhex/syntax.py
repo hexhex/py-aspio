@@ -1,5 +1,6 @@
 from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal
 from .input import InputAccessor, InputIteration, InputPredicate, InputSpecification
+from pyparsing import ParseException
 
 
 # Common syntax elements
@@ -92,7 +93,11 @@ def EmbeddedSyntax():
 
 
 def parse(syntax, string):
-    # try:
+    try:
         result = syntax.parseString(string, parseAll=True)
         return result[0]
-    # except: TODO
+    except ParseException:
+        # rethrow
+        raise
+    # except:
+    #     pass  # TODO

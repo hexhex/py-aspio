@@ -46,4 +46,9 @@ class InputSpecification:
         # TODO: Check for name errors in accessor and iteration definitions (two kinds: using an undefined variable name, redefining a variable name)
 
     def perform_mapping(self, input_args, output_stream):
+        """Perform the input mapping.
+
+        Transforms the input_args to an ASP representation according to the InputMapping,
+        and writes the results to the given output_stream (binary stream).
+        """
         pass
