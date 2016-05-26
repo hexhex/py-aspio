@@ -1,9 +1,9 @@
 import unittest
-from ..syntax import InputSyntax, parse, ParseException
+from ..parser import InputParser, parse, ParseException
 from ..input import InputSpecification
 
 
-class TestSyntax(unittest.TestCase):
+class TestParser(unittest.TestCase):
 
     def test_valid_input(self):
         valid_inputs = [
@@ -25,7 +25,7 @@ class TestSyntax(unittest.TestCase):
             'INPUT(){p();}',
         ]
         for valid_input in valid_inputs:
-            spec = parse(InputSyntax(), valid_input)
+            spec = parse(InputParser(), valid_input)
             self.assertTrue(isinstance(spec, InputSpecification))
 
     def test_invalid_input(self):
@@ -36,4 +36,4 @@ class TestSyntax(unittest.TestCase):
         ]
         for invalid_input in invalid_inputs:
             with self.assertRaises(ParseException):
-                parse(InputSyntax(), invalid_input)
+                parse(InputParser(), invalid_input)

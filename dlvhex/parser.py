@@ -23,7 +23,7 @@ comma = Literal(',').suppress()
 semicolon = Literal(';').suppress()
 
 
-def InputSyntax():
+def InputParser():
     """Syntax of the INPUT statement."""
     # Accessing objects, some examples:
     # - just access a variable directly:            node
@@ -65,36 +65,36 @@ def InputSyntax():
     return input_statement
 
 
-def OutputSyntax():
+def OutputParser():
     """Syntax of a single OUTPUT statement."""
     # TODO
     return CaselessKeyword('OUTPUT')
 
 
-def Syntax():
+def Parser():
     """Syntax of the whole I/O mapping specification: One INPUT statement and multiple OUTPUT statements in any order."""
-    i = InputSyntax().setResultsName('input')
-    o = OutputSyntax().setResultsName('output')
-    s = i & ZeroOrMore(o)
+    i = InputParser().setResultsName('input')
+    o = OutputParser().setResultsName('output')
+    p = i & ZeroOrMore(o)
     # collect input and output
-    # s.setParseAction(lambda t: TODO)
-    return s
+    # p.setParseAction(lambda t: TODO)
+    return p
 
 
-def EmbeddedSyntax():
+def EmbeddedParser():
     """Syntax of the whole I/O mapping specification, embedded in ASP comments starting with '%!'."""
-    s = Syntax()
+    p = Parser()
     # TODO:
     # Use .ignore() to ignore everything before %! and after %!.....%
     # Careful: skip over % in quoted strings!
     # might need LineStart()
-    s.ignore()
-    return s
+    p.ignore()
+    return p
 
 
-def parse(syntax, string):
+def parse(parser, string):
     try:
-        result = syntax.parseString(string, parseAll=True)
+        result = parser.parseString(string, parseAll=True)
         return result[0]
     except ParseException:
         # rethrow
