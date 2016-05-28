@@ -1,6 +1,12 @@
 from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal
-from .input import InputAccessor, InputIteration, InputPredicate, InputSpecification
+from . import input as i
 from pyparsing import ParseException
+import re
+
+
+# TODO: There might be a problem with pyparsing's ParseElement.setDefaultWhitespaceChars() (global state that can be set by everyone that uses pyparsing…)
+#       A problem might occur if the user of this library also uses pyparsing and modifies the default whitespace chars.
+#       Investigate this.
 
 
 # Common syntax elements
@@ -23,7 +29,7 @@ comma = Literal(',').suppress()
 semicolon = Literal(';').suppress()
 
 
-def InputParser():
+def InputSpecParser():
     """Syntax of the INPUT statement."""
     # Accessing objects, some examples:
     # - just access a variable directly:            node
@@ -34,7 +40,7 @@ def InputParser():
     index_accessor = lbracket + integer + rbracket
     accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
     #
-    accessor.setParseAction(lambda t: InputAccessor(t.var, t.path))
+    accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
 
     # Iterating over objects, some examples:
     # - iterate over elements:                          for node in nodes
@@ -45,14 +51,14 @@ def InputParser():
     iteration = FOR + (iteration_element | iteration_index_and_element) + IN + accessor('accessor')
     iterations = Group(ZeroOrMore(iteration))
     #
-    iteration.setParseAction(lambda t: InputIteration(t.get('idx'), t.get('elem'), t.get('accessor')))
+    iteration.setParseAction(lambda t: i.InputIteration(t.get('idx'), t.get('elem'), t.get('accessor')))
     # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
 
     predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
     predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
     predicate_specs = Group(ZeroOrMore(predicate_spec))
     #
-    predicate_spec.setParseAction(lambda t: InputPredicate(t.name, t.args, t.iters))
+    predicate_spec.setParseAction(lambda t: i.InputPredicate(t.pred, t.args, t.iters))
 
     # TODO: Types? yes or no?
     input_arg = var
@@ -60,36 +66,88 @@ def InputParser():
 
     input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace
     #
-    input_statement.setParseAction(lambda t: InputSpecification(t.args, t.preds))
+    input_statement.setParseAction(lambda t: i.InputSpecification(t.args, t.preds))
 
     return input_statement
 
 
-def OutputParser():
+def OutputSpecParser():
     """Syntax of a single OUTPUT statement."""
     # TODO
     return CaselessKeyword('OUTPUT')
 
 
-def Parser():
+def SpecParser():
     """Syntax of the whole I/O mapping specification: One INPUT statement and multiple OUTPUT statements in any order."""
-    i = InputParser().setResultsName('input')
-    o = OutputParser().setResultsName('output')
-    p = i & ZeroOrMore(o)
+    i = InputSpecParser().setResultsName('input')
+    o = OutputSpecParser().setResultsName('output')
+    p = ZeroOrMore(o) + Optional(i) + ZeroOrMore(o)   # TODO: Check if this works when both are named 'output'
     # collect input and output
-    # p.setParseAction(lambda t: TODO)
+    p.setParseAction(lambda t: 12345)  # TODO
     return p
 
 
-def EmbeddedParser():
+class EmbeddedSpecParser:
     """Syntax of the whole I/O mapping specification, embedded in ASP comments starting with '%!'."""
-    p = Parser()
-    # TODO:
-    # Use .ignore() to ignore everything before %! and after %!.....%
-    # Careful: skip over % in quoted strings!
-    # might need LineStart()
-    p.ignore()
-    return p
+    # I tried doing this part with pyparsing too, so the whole parsing can be performed in a single pass without an intermediate string representation.
+    # However, I was not able to make it work yet, so I am using a simple regex-based implementation at the moment.
+    # Most likely problem with the pyparsing attempt: automatic handling of whitespace combined with LineStart() and LineEnd()
+    # See also: http://pyparsing.wikispaces.com/share/view/18478063
+    # The old attempt:
+    #     p = SpecParser()
+    #     asp_quoted_string = QuotedString('"', escChar='\\')
+    #     asp_end = LineEnd() | '%!' | ('%' + ZeroOrMore(CharsNotIn('\n')) + LineEnd())       # '%!' must be before the regular comments since the '|' operator matches the first subexpression (MatchFirst)
+    #     asp_line = LineStart() + ZeroOrMore(CharsNotIn('"%') | asp_quoted_string) + asp_end
+    #     p.ignore(asp_line)
+    #     return p
+    #
+    # This seems to work better, although neither LineStart() nor LineEnd() will match if the line starts with whitespace
+    # (presumably because the parser by default skips as much whitespace as possible after parsing a token):
+    #    asp_quoted_string = QuotedString('"', escChar='\\')
+    #    asp_end = LineEnd().leaveWhitespace() | '%!' | ('%' + ZeroOrMore(CharsNotIn('\n')) + LineEnd().leaveWhitespace())       # '%!' must be before the regular comments since the '|' operator matches the first subexpression (MatchFirst)
+    #    asp_line = (LineStart().leaveWhitespace() | LineEnd().leaveWhitespace()) + ZeroOrMore(CharsNotIn('"%\n') | asp_quoted_string) + asp_end
+    #    p.ignore(asp_line)
+    #
+    # This seems to work quite well (implementation of comments inside %! part is still missing though, would be an ignore on SpecParser()):
+    #    ParserElement.setDefaultWhitespaceChars(' \t\r')
+    #    p = ZeroOrMore(Word(printables))
+    #    # p.setWhitespaceChars(' \t\r')  # TODO: What to do with '\r'?
+    #    linebreak = White('\n')
+    #    asp_quoted_string = QuotedString('"', escChar='\\')
+    #    asp_end = FollowedBy(linebreak) | '%!' | ('%' + ZeroOrMore(CharsNotIn('\n')) + FollowedBy(linebreak))       # '%!' must be before the regular comments since the '|' operator matches the first subexpression (MatchFirst)
+    #    asp_line = (linebreak | StringStart()) + ZeroOrMore(CharsNotIn('"%\n') | asp_quoted_string) + asp_end
+    #    p.ignore(asp_line)
+    #    p.ignore(linebreak)
+
+    spec_parser = SpecParser()
+
+    embedded_re = re.compile('''
+        ^  # Start of each line (in MULTILINE mode)
+        # The ASP part before comments
+        (
+            [^\\\n%"]  # anything except newlines, comment start, and quotes
+            |
+            # Quoted string: any char except newlines/backslash/quotes, or backslash escape sequences
+            # Note: need four backslashes to represent a single literal backslash since escaping happens twice: once in the python string and once in the regex
+            " ( [^\\\n\\\\"] | \\\\. )* "
+        )*
+        %\\!                    # Our specification language is embedded in special %! comments
+        (?P<spec>[^\\\n%]*)     # The part we want to extract
+        (%.*)?                  # Comments in the specification language also start with % (like regular ASP comments)
+        $  # end of each line (in MULTILINE mode)
+    ''', re.MULTILINE | re.VERBOSE)
+
+    @classmethod
+    def extractFromString(cls, string):
+        return '\n'.join(m.group('spec') for m in cls.embedded_re.finditer(string))
+
+    def parseString(self, string, *, parseAll):
+        return (parse(type(self).spec_parser, type(self).extractFromString(string)),)
+
+
+def AnswerSetParser():
+    # TODO: extract answer sets from dlvhex' output.
+    pass
 
 
 def parse(parser, string):
