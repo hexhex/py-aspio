@@ -121,18 +121,17 @@ class EmbeddedSpecParser:
 
     spec_parser = SpecParser()
 
-    embedded_re = re.compile('''
+    embedded_re = re.compile(r'''
         ^  # Start of each line (in MULTILINE mode)
         # The ASP part before comments
         (
-            [^\\\n%"]  # anything except newlines, comment start, and quotes
+            [^\n%"]  # anything except newlines, comment start, and quotes
             |
             # Quoted string: any char except newlines/backslash/quotes, or backslash escape sequences
-            # Note: need four backslashes to represent a single literal backslash since escaping happens twice: once in the python string and once in the regex
-            " ( [^\\\n\\\\"] | \\\\. )* "
+            " ( [^\n\\"] | \\. )* "
         )*
-        %\\!                    # Our specification language is embedded in special %! comments
-        (?P<spec>[^\\\n%]*)     # The part we want to extract
+        %\!                     # Our specification language is embedded in special %! comments
+        (?P<spec>[^\n%]*)       # The part we want to extract
         (%.*)?                  # Comments in the specification language also start with % (like regular ASP comments)
         $  # end of each line (in MULTILINE mode)
     ''', re.MULTILINE | re.VERBOSE)
@@ -141,7 +140,7 @@ class EmbeddedSpecParser:
     def extractFromString(cls, string):
         return '\n'.join(m.group('spec') for m in cls.embedded_re.finditer(string))
 
-    def parseString(self, string, *, parseAll):
+    def parseString(self, string, *, parseAll=True):
         return (parse(type(self).spec_parser, type(self).extractFromString(string)),)
 
 
