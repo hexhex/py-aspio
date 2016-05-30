@@ -1,4 +1,5 @@
 import io
+import numbers
 from . import parser
 
 
@@ -10,9 +11,31 @@ class StreamAccumulator:
             raise ValueError("output_stream must be writable")
         self._stream = output_stream
 
-    def add_fact(self, predicate, *args):
-        # TODO write to self._stream
-        pass
+    def quote(self, arg):
+        """Enclose the given argument in double quotes, escaping any contained quotes with a backslash."""
+        return '"' + str(arg).replace(r'"', r'\"') + '"'
+
+    def arg_str(self, arg):
+        """Convert the given argument to a string suitable to be passed to dlvhex."""
+        if isinstance(arg, numbers.Integral):
+            # Output integers without quotes (so we can use them for arithmetic in dlvhex)
+            return str(arg)
+        else:
+            # Everything else is converted to a string and quoted unconditionally
+            # (however: dlvhex does not consider "abc" and abc (with/without quotes) to be equal... that could lead to problems, TODO: investigate)
+            return self.quote(arg)
+
+    def add_fact(self, predicate, args):
+        """Writes a fact to the output stream, in the usual ASP syntax: predicate(arg1, arg2, arg3)."""
+        assert isinstance(predicate, str)
+        assert len(predicate) > 0
+        self._stream.write(predicate)
+        self._stream.write('(')
+        for (idx, arg) in enumerate(args):
+            if idx > 0:
+                self._stream.write(',')
+            self._stream.write(self.arg_str(arg))
+        self._stream.write('). ')
 
 
 class InputAccessor:
@@ -46,25 +69,25 @@ class InputIteration:
     def __repr__(self):
         return 'FOR (' + repr(self._index_variable) + ', ' + repr(self._element_variable) + ') IN ' + repr(self._accessor)
 
-    def perform_iteration(self, variable_assignment):
-        """Performs the represented iteration relative to the given variable assignment.
-
-        @returns
-            An iterable containing the newly generated variable assignments.
-            The returned variable assignments contain all the bindings of the original assignment unchanged,
-            but will add one or two new bindings.
-        """
-        # TODO: It does not seem good to create new objects for every single fact...
-        # Can't we reuse a single dictionary and update its contents during iteration?
-        # maybe perform iteration in InputPredicate, using a stack?
-        collection = self._accessor.perform_access(variable_assignment)
-        if self._index_variable is not None:
-            pass  # TODO
-        else:
-            for x in collection:
-                d = variable_assignment.copy()
-                d[self._element_variable] = x
-                yield d
+    # def perform_iteration(self, variable_assignment):
+    #     """Performs the represented iteration relative to the given variable assignment.
+    #
+    #     @returns
+    #         An iterable containing the newly generated variable assignments.
+    #         The returned variable assignments contain all the bindings of the original assignment unchanged,
+    #         but will add one or two new bindings.
+    #     """
+    #     # TODO: It does not seem good to create new objects for every single fact...
+    #     # Can't we reuse a single dictionary and update its contents during iteration?
+    #     # maybe perform iteration in InputPredicate, using a stack?
+    #     collection = self._accessor.perform_access(variable_assignment)
+    #     if self._index_variable is not None:
+    #         pass  # TODO
+    #     else:
+    #         for x in collection:
+    #             d = variable_assignment.copy()
+    #             d[self._element_variable] = x
+    #             yield d
 
     def get_collection_iterator(self, variable_assignment):
         collection = self._accessor.perform_access(variable_assignment)
@@ -119,7 +142,7 @@ class InputPredicate:
             if len(iter_stack) == len(self._iterations):
                 # All iterations have been performed
                 # => Generate a fact
-                accumulator.add_fact(self._predicate, tuple(map(lambda arg: arg.perform_access(va), self._arguments)))
+                accumulator.add_fact(self._predicate, tuple(arg.perform_access(va) for arg in self._arguments))
                 if len(self._iterations) == 0:
                     break
             else:
@@ -154,7 +177,7 @@ class InputSpecification:
         """Perform the input mapping.
 
         Transforms the input_args to an ASP representation according to the InputMapping,
-        and writes the results to the given output_stream (a writable stream in text mode).
+        and passes the results to the given accumulator (see StreamAccumulator class).
         """
         if len(input_args) != len(self._arguments):
             raise ValueError("Wrong number of arguments: expecting %d, got %d" % (len(self._arguments), len(input_args)))
