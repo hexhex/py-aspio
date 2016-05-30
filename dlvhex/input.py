@@ -93,7 +93,6 @@ class InputPredicate:
         @param arguments: A list of InputAccessor instances that describe the arguments of the generated facts.
         @param iterations: A list of InputIteration instances that describe how to generate the set of facts from the input arguments.
         """
-        print(predicate, arguments, iterations)
         self._predicate = predicate
         self._arguments = tuple(arguments)
         self._iterations = tuple(iterations)
@@ -120,7 +119,7 @@ class InputPredicate:
             if len(iter_stack) == len(self._iterations):
                 # All iterations have been performed
                 # => Generate a fact
-                accumulator.add_fact(self._predicate, map(lambda arg: arg.perform_access(va), self._arguments))
+                accumulator.add_fact(self._predicate, tuple(map(lambda arg: arg.perform_access(va), self._arguments)))
                 if len(self._iterations) == 0:
                     break
             else:
