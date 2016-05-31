@@ -4,19 +4,18 @@ import setuptools.command.test
 
 class TestCommand(setuptools.command.test.test):
     """Setuptools test command explicitly using test discovery."""
-    # from http://stackoverflow.com/a/23443087/1889401
+    # see http://stackoverflow.com/a/23443087/1889401
 
     def _test_args(self):
         yield 'discover'
-        for arg in super(TestCommand, self)._test_args():
-            yield arg
+        yield from super(TestCommand, self)._test_args()
 
 
 setup(
     name='dlvhex',
     version='0.0.1',
-    description='',  # TODO
-    url='',  # TODO
+    description='Python integration of the dlvhex solver',
+    url='https://github.com/JakobR/py-dlvhex',
 
     packages=find_packages(exclude=['*.tests', '*.tests.*', 'tests.*', 'tests']),
 
