@@ -1,6 +1,5 @@
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal
+from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, Forward, ParseException  # type: ignore
 from . import input as i
-from pyparsing import ParseException
 import re
 
 
@@ -12,12 +11,23 @@ import re
 # Common syntax elements
 predicate_name = Word(alphas, alphanums).setName('predicate name')
 py_identifier = Word(alphas, alphanums).setName('python identifier')
+py_qualified_identifier = Word(alphas, alphanums).setName('qualified python identifier')  # TODO: allow dots for modules
 var = Word(alphas, alphanums).setName('variable')
 integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
 INPUT = CaselessKeyword('INPUT').suppress()
 FOR = CaselessKeyword('for').suppress()
 IN = CaselessKeyword('in').suppress()
 OUTPUT = CaselessKeyword('OUTPUT').suppress()
+PREDICATE = CaselessKeyword('predicate').suppress()
+CONTAINER = CaselessKeyword('container').suppress()
+SET = CaselessKeyword('set').suppress()
+SEQUENCE = CaselessKeyword('sequence').suppress()
+MAPPING = CaselessKeyword('mapping').suppress()
+INDEX = CaselessKeyword('index').suppress()
+KEY = CaselessKeyword('key').suppress()
+CONTENT = CaselessKeyword('content').suppress()
+CLASS = CaselessKeyword('class').suppress()
+ARGUMENTS = CaselessKeyword('arguments').suppress()
 lpar = Literal('(').suppress()
 rpar = Literal(')').suppress()
 lbracket = Literal('[').suppress()
@@ -27,6 +37,7 @@ rbrace = Literal('}').suppress()
 dot = Literal('.').suppress()
 comma = Literal(',').suppress()
 semicolon = Literal(';').suppress()
+equals = Literal('=').suppress()
 
 
 def InputSpecParser():
@@ -47,11 +58,16 @@ def InputSpecParser():
     # - iterate over indices and elements of a list:    for (i, m) in node.neighbors
     # - iterate over keys and elements of a dictionary: for (k, v) in some_dict
     iteration_element = var('elem')
-    iteration_index_and_element = lpar + var('idx') + comma + var('elem') + rpar
-    iteration = FOR + (iteration_element | iteration_index_and_element) + IN + accessor('accessor')
+    iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
+    set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')     # TODO: Ambiguity? Is "set" the SET keyword or a variable named "set"? (should be unambiguous since we can look at the following token? variable could be named "for" too). We could just forbid variable names that are keywords.
+    sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
+    mapping_iteration = FOR + iteration_assoc_and_element + IN + MAPPING + accessor('accessor')
+    iteration = sequence_iteration | mapping_iteration | set_iteration
     iterations = Group(ZeroOrMore(iteration))
     #
-    iteration.setParseAction(lambda t: i.InputIteration(t.get('idx'), t.get('elem'), t.get('accessor')))
+    set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
+    sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
+    mapping_iteration.setParseAction(lambda t: i.InputMappingIteration(t.assoc, t.elem, t.accessor))
     # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
 
     predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
@@ -73,8 +89,24 @@ def InputSpecParser():
 
 def OutputSpecParser():
     """Syntax of a single OUTPUT statement."""
-    # TODO
-    return CaselessKeyword('OUTPUT')
+    # # TODO: Order of clauses should be arbitrary
+    # # TODO: Some clauses are optional
+    # output_spec = Forward()
+
+    # arg = py_identifier | output_spec
+    # args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
+    # object_spec = CLASS + equals + py_qualified_identifier + comma + ARGUMENTS + equals + args
+
+    # content = integer | (py_qualified_identifier + lpar + Group(Optional(integer + ZeroOrMore(comma + integer) + Optional(comma))) + rpar)
+    # set_spec = CONTAINER + equals + SET
+    # list_spec = CONTAINER + equals + SEQUENCE + comma + INDEX + equals + integer
+    # dict_spec = CONTAINER + equals + MAPPING + comma + KEY + equals + content
+    # container_spec = PREDICATE + equals + predicate_name + comma + (set_spec | list_spec | dict_spec) + comma + CONTENT + equals + content
+
+    # output_spec << (lbrace + (container_spec | object_spec) + rbrace)
+    # output_statement = OUTPUT + py_identifier + output_spec
+    # return output_statement
+    return OUTPUT
 
 
 def SpecParser():
@@ -158,3 +190,20 @@ def parse(parser, string):
         raise
     # except:
     #     pass  # TODO
+
+
+# def _parse(parser, parse_fn, parse_arg):
+#     try:
+#         result = parse_fn(parser, parse_arg, parseAll=True)
+#         # result = parser.parseFile(file_or_filename, parseAll=True)
+#         # result = parser.parseString(string, parseAll=True)
+#         return result[0]
+#     except ParseException:
+#         # rethrow
+#         raise
+#     # except:
+#     #     pass  # TODO
+# def parseFile(parser, file_or_filename):
+#     return _parse(parser, parser.parseFile, file_or_filename)
+# def parseString(parser, string):
+#     return _parse(parser, parser.parseString, string)

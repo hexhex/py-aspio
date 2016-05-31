@@ -1,10 +1,10 @@
 import unittest
 from collections import defaultdict
 from io import StringIO
-from ..input import InputSpecification, StreamAccumulator
+from ..input import InputSpecification, FactAccumulator, StreamAccumulator
 
 
-class TestAccumulator:
+class TestAccumulator(FactAccumulator):
     def __init__(self):
         self.facts = defaultdict(set)
 
@@ -20,7 +20,7 @@ class TestMapping(unittest.TestCase):
         acc = TestAccumulator()
         spec = InputSpecification.parse(r'''
             INPUT (xs) {
-                p(x[0], x[1]) for x in xs;
+                p(x[0], x[1]) for x in set xs;
                 q(y) for x in xs for y in x;
                 r(xs[2][1]);
                 empty();

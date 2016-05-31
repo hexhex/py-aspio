@@ -16,8 +16,8 @@ class TestParser(unittest.TestCase):
                 empty();
                 simple(obj);
                 p(nodes[1].label);
-                node(n.label) for n in nodes;
-                edge(n.label, m.label, m.prop[3]) for n in nodes for (i, m) in n.neighbors;
+                node(n.label) for n in set nodes;
+                edge(n.label, m.label, m.prop[3]) for n in nodes for (i, m) in sequence n.neighbors;
             }
             ''',
             'INPUT(){}',
