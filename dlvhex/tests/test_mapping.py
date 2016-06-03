@@ -17,21 +17,30 @@ class TestMapping(unittest.TestCase):
 
     def test_mapping(self):
         xs = [(0, 0), (1, 2), ('abc', 'def'), (7, 'x')]
+        ys = {
+            0: 1,
+            'abc': 'xyz',
+            3: 'zzz'
+        }
         acc = TestAccumulator()
         spec = InputSpecification.parse(r'''
-            INPUT (xs) {
+            INPUT (xs, ys) {
                 p(x[0], x[1]) for x in set xs;
                 q(y) for x in xs for y in x;
                 r(xs[2][1]);
                 empty();
+                seq(i, x[0]) for (i, x) in sequence xs;
+                dict(value, key) for (key, value) in mapping ys;
             }''')
         expected_result = {
             'p': set(xs),
             'q': set((y,) for x in xs for y in x),
             'r': set([('def',)]),  # Note: need to wrap the tuple in an iterable, because set() will iterate over its argument
             'empty': set([tuple()]),
+            'seq': set((i, x[0]) for (i, x) in enumerate(xs)),
+            'dict': set((v, k) for (k, v) in ys.items())
         }
-        spec.perform_mapping([xs], acc)
+        spec.perform_mapping([xs, ys], acc)
         self.assertEqual(acc.facts, expected_result)
 
     def test_stream_accumulator(self):

@@ -168,7 +168,7 @@ class InputMappingIteration(InputIteration):
         collection = self.accessor.perform_access(variable_assignment)
         if isinstance(collection, collections.Mapping):
             # yields (key, element) tuples
-            return iter(collection.values())
+            return iter(collection.items())
         else:
             raise ValueError('When trying to perform iteration {0}: collection is not a mapping, got instead: {1}'.format(repr(self), repr(collection)))
 
@@ -197,6 +197,7 @@ class InputPredicate:
             arg.check_variable_bindings(bound_variables)
 
     def perform_mapping(self, initial_variable_assignment: VariableAssignment, accumulator: FactAccumulator) -> None:
+        # TODO: Add some explanation and use better variable names (it/iter??? maybe rename InputIteration to InputLoop so we don't confuse the python iterator concept with our iteration concept)
         va = initial_variable_assignment.copy()
         iter_stack = []  # type: List[Iterator[Any]]
         while True:

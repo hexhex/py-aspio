@@ -84,11 +84,15 @@ def InputSpecParser():
     #
     input_statement.setParseAction(lambda t: i.InputSpecification(t.args, t.preds))
 
+    # TODO:
+    # Maybe ignore '%' comments here already?
+    # Would be helpful if someone wants to define the mapping in the python code, and document it. (and wants to parse it directly, without having to embed it into ASP code)
     return input_statement
 
 
 def OutputSpecParser():
-    """Syntax of a single OUTPUT statement."""
+    """Syntax of the OUTPUT statement."""
+    # TODO: We want one big OUTPUT statement??
     # # TODO: Order of clauses should be arbitrary
     # # TODO: Some clauses are optional
     # output_spec = Forward()
@@ -113,9 +117,9 @@ def SpecParser():
     """Syntax of the whole I/O mapping specification: One INPUT statement and multiple OUTPUT statements in any order."""
     i = InputSpecParser().setResultsName('input')
     o = OutputSpecParser().setResultsName('output')
-    p = ZeroOrMore(o) + Optional(i) + ZeroOrMore(o)   # TODO: Check if this works when both are named 'output'
+    p = Optional(i) & Optional(o)
     # collect input and output
-    p.setParseAction(lambda t: 12345)  # TODO
+    p.setParseAction(lambda t: (t.input, t.output))  # TODO
     return p
 
 
@@ -153,6 +157,9 @@ class EmbeddedSpecParser:
 
     spec_parser = SpecParser()
 
+    # TODO:
+    # A reasonable simplification might be to only allow %! comments for input specification at the start of a line,
+    # i.e. only some whitespace may be before %! comments, and no ASP code.
     embedded_re = re.compile(r'''
         ^  # Start of each line (in MULTILINE mode)
         # The ASP part before comments

@@ -8,7 +8,7 @@ Python integration of the `dlvhex solver <http://www.kr.tuwien.ac.at/research/sy
 Dependencies
 ============
 
-* `dlvhex2 <https://github.com/hexhex/core>`_
+* `dlvhex 2.5+ <https://github.com/hexhex/core>`_
 
 * python 3.5+
 
