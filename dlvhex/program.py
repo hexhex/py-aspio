@@ -26,15 +26,6 @@ class Program:
         if code is not None:
             self.append_code(code)
 
-        # TODO: Better not to use "magic" like this...
-        import inspect
-        frame = inspect.currentframe()
-        try:
-            print(frame.f_back.f_locals)
-            print(frame.f_back.f_globals)
-        finally:
-            del frame
-
     def parse_spec(self, code: str):
         self.input_spec, self.output_spec = parse(Program.PARSER, code)
 
