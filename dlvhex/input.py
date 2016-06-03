@@ -3,6 +3,7 @@ import numbers
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet, Tuple
 from typing.io import TextIO  # type: ignore
+import dlvhex
 from . import parser
 
 
@@ -50,6 +51,8 @@ class StreamAccumulator(FactAccumulator):
                 self._stream.write(',')
             self._stream.write(self.arg_str(arg))
         self._stream.write(').\n')
+        if dlvhex.debug:
+            print(predicate, args)  # TODO: more sophisticated approach... "tee" output stream to stderr in constructor? see also http://stackoverflow.com/a/4985080/1889401
 
 
 class UndefinedVariableError(ValueError):
