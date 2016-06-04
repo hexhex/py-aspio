@@ -70,7 +70,8 @@ class ProcessWrapper(Iterable):
     It is only possible to iterate *once* over a ProcessWrapper instance.
 
     If the process exits with a return code other than 0,
-    a SolverError will be thrown during iteration, containing the return code and stderr output of the process.'''
+    a SolverError will be thrown during iteration, containing the return code and stderr output of the process.
+    '''
 
     class CaptureThread(Thread):
         def __init__(self, stream):
@@ -79,7 +80,8 @@ class ProcessWrapper(Iterable):
             self.data = None
 
         def run(self):
-            self.data = self.stream.read()
+            with self.stream as s:
+                self.data = s.read()
 
     def __init__(self, process: Popen, encoding: str) -> None:
         self.process = process
@@ -96,7 +98,8 @@ class ProcessWrapper(Iterable):
         assert not self.iterating, 'You may only iterate once over a single ProcessWrapper instance.'
         self.iterating = True
         # TODO: Requirement: dlvhex2 needs to flush stdout after every line
-        yield from io.TextIOWrapper(self.process.stdout, encoding=self.encoding)  # yields lines of text from stdout
+        with io.TextIOWrapper(self.process.stdout, encoding=self.encoding) as stdout_lines:
+            yield from stdout_lines
         # stdout has been closed, wait for dlvhex2 to terminate
         self.process.wait()
         if self.error():
