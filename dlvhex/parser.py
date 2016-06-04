@@ -119,7 +119,7 @@ def SpecParser():
     o = OutputSpecParser().setResultsName('output')
     p = Optional(i) & Optional(o)
     # collect input and output
-    p.setParseAction(lambda t: (t.input, t.output))  # TODO
+    p.setParseAction(lambda t: (t.get('input'), t.get('output')))  # TODO
     return p
 
 

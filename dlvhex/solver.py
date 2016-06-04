@@ -14,6 +14,8 @@ class SolverError(ValueError):  # TODO: This is not really a ValueError, or is i
     def __init__(self, returncode, stderr):
         message = 'dlvhex2 terminated with error {0}.\nOutput on stderr:\n{1}'.format(returncode, stderr)
         super().__init__(message)
+        self.returncode = returncode
+        self.stderr = stderr
 
 
 class Solver:
