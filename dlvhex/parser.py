@@ -20,42 +20,18 @@ def PyParsingDefaultWhitespaceChars(whitespace_chars):
     ParserElement.setDefaultWhitespaceChars(previous_whitespace_chars)
 
 
-# class IgnoreComments():
-#     '''Wraps a parser and creates a new parser that removes all comments before applying the wrapped parser.
-#
-#     Comments start with '%' and continue until the end of the same line.
-#     '''
-#
-#     embedded_re = re.compile(r'''
-#         ^  # Start of each line (in MULTILINE mode)
-#         # The part before comments is what we want to extract here
-#         (?P<content>
-#             [^\n%"]  # anything except newlines, comment start, and quotes
-#             |
-#             # Quoted string: contains any char except newlines/backslash/quotes, or backslash escape sequences
-#             " (?: [^\n\\"] | \\. )* "
-#         )*
-#         (?: %.* )?                  # ASP comments start with %
-#         $  # end of each line (in MULTILINE mode)
-#     ''', re.MULTILINE | re.VERBOSE)
-#
-#     def __init__(self, parser):
-#         self.parser = parser
-#
-#     @classmethod
-#     def extractFromString(cls, string):
-#         return '\n'.join(m.group('content') for m in cls.embedded_re.finditer(string))
-#
-#     def parseString(self, string, *, parseAll=True):
-#         return (parse(self.parser, type(self).extractFromString(string)),)
-def IgnoreComments(parser):
+DEFAULT_WHITESPACE_CHARS = ' \n\t\r'  # this is the same as pyparsing's default
+
+
+def ignore_comments(parser):
+    '''Ignore comments (starting with '%' and continuing until the end of the same line) on the given parser (ParserElement instance).'''
     comment = '%' + restOfLine
     parser.ignore(comment)
     return parser
 
 
 # Common syntax elements
-with PyParsingDefaultWhitespaceChars(' \n\t\r'):
+with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     predicate_name = Word(alphas, alphanums).setName('predicate name')
     py_identifier = Word(alphas, alphanums).setName('python identifier')
     py_qualified_identifier = Word(alphas, alphanums).setName('qualified python identifier')  # TODO: allow dots for modules
@@ -89,101 +65,102 @@ with PyParsingDefaultWhitespaceChars(' \n\t\r'):
 
 def RawInputSpecParser():
     '''Syntax of the INPUT statement (and nothing else).'''
-    # with PyParsingDefaultWhitespaceChars(' \n\t\r'):  TODO
-    # Accessing objects, some examples:
-    # - just access a variable directly:            node
-    # - access a field on a variable:               node.label
-    # - accessing a fixed index in a collection:    some_tuple[3]
-    # - chainable:                                  node.neighbors[2].label
-    field_accessor = dot + py_identifier
-    index_accessor = lbracket + integer + rbracket
-    accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
-    #
-    accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        # Accessing objects, some examples:
+        # - just access a variable directly:            node
+        # - access a field on a variable:               node.label
+        # - accessing a fixed index in a collection:    some_tuple[3]
+        # - chainable:                                  node.neighbors[2].label
+        field_accessor = dot + py_identifier
+        index_accessor = lbracket + integer + rbracket
+        accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
+        #
+        accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
 
-    # Iterating over objects, some examples:
-    # - iterate over elements:                          for node in nodes
-    # - iterate over indices and elements of a list:    for (i, m) in node.neighbors
-    # - iterate over keys and elements of a dictionary: for (k, v) in some_dict
-    iteration_element = var('elem')
-    iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
-    set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')     # TODO: Ambiguity? Is "set" the SET keyword or a variable named "set"? (should be unambiguous since we can look at the following token? variable could be named "for" too). We could just forbid variable names that are keywords.
-    sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
-    mapping_iteration = FOR + iteration_assoc_and_element + IN + MAPPING + accessor('accessor')
-    iteration = sequence_iteration | mapping_iteration | set_iteration
-    iterations = Group(ZeroOrMore(iteration))
-    #
-    set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
-    sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
-    mapping_iteration.setParseAction(lambda t: i.InputMappingIteration(t.assoc, t.elem, t.accessor))
-    # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
+        # Iterating over objects, some examples:
+        # - iterate over elements:                          for node in nodes
+        # - iterate over indices and elements of a list:    for (i, m) in node.neighbors
+        # - iterate over keys and elements of a dictionary: for (k, v) in some_dict
+        iteration_element = var('elem')
+        iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
+        set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')     # TODO: Ambiguity? Is "set" the SET keyword or a variable named "set"? (should be unambiguous since we can look at the following token? variable could be named "for" too). We could just forbid variable names that are keywords.
+        sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
+        mapping_iteration = FOR + iteration_assoc_and_element + IN + MAPPING + accessor('accessor')
+        iteration = sequence_iteration | mapping_iteration | set_iteration
+        iterations = Group(ZeroOrMore(iteration))
+        #
+        set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
+        sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
+        mapping_iteration.setParseAction(lambda t: i.InputMappingIteration(t.assoc, t.elem, t.accessor))
+        # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
 
-    predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
-    predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
-    predicate_specs = Group(ZeroOrMore(predicate_spec))
-    #
-    predicate_spec.setParseAction(lambda t: i.InputPredicate(t.pred, t.args, t.iters))
+        predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
+        predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
+        predicate_specs = Group(ZeroOrMore(predicate_spec))
+        #
+        predicate_spec.setParseAction(lambda t: i.InputPredicate(t.pred, t.args, t.iters))
 
-    # TODO: Types? yes or no?
-    input_arg = var
-    input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
+        # TODO: Types? yes or no?
+        input_arg = var
+        input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
 
-    input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace
-    #
-    input_statement.setParseAction(lambda t: i.InputSpecification(t.args, t.preds))
-
-    # TODO:
-    # Maybe ignore '%' comments here already?
-    # Would be helpful if someone wants to define the mapping in the python code, and document it. (and wants to parse it directly, without having to embed it into ASP code)
-    return input_statement
+        input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace
+        #
+        input_statement.setParseAction(lambda t: i.InputSpecification(t.args, t.preds))
+        return input_statement
 
 
 def InputSpecParser():
     '''Syntax of the INPUT statement (supports comments starting with '%').'''
-    return IgnoreComments(RawInputSpecParser())
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        return ignore_comments(RawInputSpecParser())
 
 
 def RawOutputSpecParser():
     '''Syntax of the OUTPUT statement (and nothing else).'''
-    # TODO: We want one big OUTPUT statement??
-    # # TODO: Order of clauses should be arbitrary
-    # # TODO: Some clauses are optional
-    # output_spec = Forward()
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        # TODO: We want one big OUTPUT statement??
+        # # TODO: Order of clauses should be arbitrary
+        # # TODO: Some clauses are optional
+        # output_spec = Forward()
 
-    # arg = py_identifier | output_spec
-    # args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
-    # object_spec = CLASS + equals + py_qualified_identifier + comma + ARGUMENTS + equals + args
+        # arg = py_identifier | output_spec
+        # args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
+        # object_spec = CLASS + equals + py_qualified_identifier + comma + ARGUMENTS + equals + args
 
-    # content = integer | (py_qualified_identifier + lpar + Group(Optional(integer + ZeroOrMore(comma + integer) + Optional(comma))) + rpar)
-    # set_spec = CONTAINER + equals + SET
-    # list_spec = CONTAINER + equals + SEQUENCE + comma + INDEX + equals + integer
-    # dict_spec = CONTAINER + equals + MAPPING + comma + KEY + equals + content
-    # container_spec = PREDICATE + equals + predicate_name + comma + (set_spec | list_spec | dict_spec) + comma + CONTENT + equals + content
+        # content = integer | (py_qualified_identifier + lpar + Group(Optional(integer + ZeroOrMore(comma + integer) + Optional(comma))) + rpar)
+        # set_spec = CONTAINER + equals + SET
+        # list_spec = CONTAINER + equals + SEQUENCE + comma + INDEX + equals + integer
+        # dict_spec = CONTAINER + equals + MAPPING + comma + KEY + equals + content
+        # container_spec = PREDICATE + equals + predicate_name + comma + (set_spec | list_spec | dict_spec) + comma + CONTENT + equals + content
 
-    # output_spec << (lbrace + (container_spec | object_spec) + rbrace)
-    # output_statement = OUTPUT + py_identifier + output_spec
-    # return output_statement
-    return OUTPUT
+        # output_spec << (lbrace + (container_spec | object_spec) + rbrace)
+        # output_statement = OUTPUT + py_identifier + output_spec
+        # return output_statement
+        return OUTPUT
 
 
 def OutputSpecParser():
     '''Syntax of the OUTPUT statement (supports comments starting with '%').'''
-    return IgnoreComments(RawOutputSpecParser())
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        return ignore_comments(RawOutputSpecParser())
 
 
 def RawSpecParser():
     '''Syntax of the whole I/O mapping specification: One INPUT statement and one OUTPUT statement in any order. This parser does not support comments.'''
-    i = RawInputSpecParser().setResultsName('input')
-    o = RawOutputSpecParser().setResultsName('output')
-    p = Optional(i) & Optional(o)
-    # collect input and output
-    p.setParseAction(lambda t: (t.get('input'), t.get('output')))  # TODO
-    return p
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        i = RawInputSpecParser().setResultsName('input')
+        o = RawOutputSpecParser().setResultsName('output')
+        p = Optional(i) & Optional(o)
+        # collect input and output
+        p.setParseAction(lambda t: (t.get('input'), t.get('output')))  # TODO
+        return p
 
 
 def SpecParser():
     '''Syntax of the whole I/O mapping specification: One INPUT statement and one OUTPUT statement in any order. This parser supports comments starting with '%'.'''
-    return IgnoreComments(RawOutputSpecParser())
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        return ignore_comments(RawOutputSpecParser())
 
 
 class EmbeddedSpecParser:
@@ -247,8 +224,9 @@ class EmbeddedSpecParser:
 
 
 def AnswerSetParser():
-    # TODO: extract answer sets from dlvhex' output.
-    pass
+    with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        # TODO: extract answer sets from dlvhex' output.
+        pass
 
 
 def parse(parser, string):
