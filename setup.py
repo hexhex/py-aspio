@@ -19,7 +19,9 @@ setup(
 
     packages=find_packages(exclude=['*.tests', '*.tests.*', 'tests.*', 'tests']),
 
-    requires='pyparsing',  # TODO
+    install_requires=[
+        'pyparsing >= 2.1.4',
+    ],
 
     author='Jakob Rath',
     author_email='jakob.rath@student.tuwien.ac.at',
