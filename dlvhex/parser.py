@@ -1,47 +1,95 @@
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, Forward, ParseException  # type: ignore
+from contextlib import contextmanager
+from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, Forward, ParseException, ParserElement, CharsNotIn, FollowedBy, White, StringEnd, restOfLine  # type: ignore
 from . import input as i
 import re
 
+__all__ = ['InputSpecParser']  # TODO
 
-# TODO: There might be a problem with pyparsing's ParseElement.setDefaultWhitespaceChars() (global state that can be set by everyone that uses pyparsing…)
-#       A problem might occur if the user of this library also uses pyparsing and modifies the default whitespace chars.
-#       Investigate this.
+
+@contextmanager
+def PyParsingDefaultWhitespaceChars(whitespace_chars):
+    '''Set the given whitespace_chars as pyparsing's default whitespace chars while the context manager is active.
+
+    Since ParserElement.DEFAULT_WHITE_CHARS is a global variable, this method is not thread-safe (but no pyparsing parser construction is thread-safe for the same reason anyway).
+    '''
+    # A possible solution to this problem:
+    # Since the pyparsing code is basically a single big file, we could just copy it (under dlvhex/vendor or something like that) and have our own "private" version of pyparsing. (TODO: think about this some more and maybe do it)
+    previous_whitespace_chars = ParserElement.DEFAULT_WHITE_CHARS
+    ParserElement.setDefaultWhitespaceChars(whitespace_chars)
+    yield
+    ParserElement.setDefaultWhitespaceChars(previous_whitespace_chars)
+
+
+# class IgnoreComments():
+#     '''Wraps a parser and creates a new parser that removes all comments before applying the wrapped parser.
+#
+#     Comments start with '%' and continue until the end of the same line.
+#     '''
+#
+#     embedded_re = re.compile(r'''
+#         ^  # Start of each line (in MULTILINE mode)
+#         # The part before comments is what we want to extract here
+#         (?P<content>
+#             [^\n%"]  # anything except newlines, comment start, and quotes
+#             |
+#             # Quoted string: contains any char except newlines/backslash/quotes, or backslash escape sequences
+#             " (?: [^\n\\"] | \\. )* "
+#         )*
+#         (?: %.* )?                  # ASP comments start with %
+#         $  # end of each line (in MULTILINE mode)
+#     ''', re.MULTILINE | re.VERBOSE)
+#
+#     def __init__(self, parser):
+#         self.parser = parser
+#
+#     @classmethod
+#     def extractFromString(cls, string):
+#         return '\n'.join(m.group('content') for m in cls.embedded_re.finditer(string))
+#
+#     def parseString(self, string, *, parseAll=True):
+#         return (parse(self.parser, type(self).extractFromString(string)),)
+def IgnoreComments(parser):
+    comment = '%' + restOfLine
+    parser.ignore(comment)
+    return parser
 
 
 # Common syntax elements
-predicate_name = Word(alphas, alphanums).setName('predicate name')
-py_identifier = Word(alphas, alphanums).setName('python identifier')
-py_qualified_identifier = Word(alphas, alphanums).setName('qualified python identifier')  # TODO: allow dots for modules
-var = Word(alphas, alphanums).setName('variable')
-integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
-INPUT = CaselessKeyword('INPUT').suppress()
-FOR = CaselessKeyword('for').suppress()
-IN = CaselessKeyword('in').suppress()
-OUTPUT = CaselessKeyword('OUTPUT').suppress()
-PREDICATE = CaselessKeyword('predicate').suppress()
-CONTAINER = CaselessKeyword('container').suppress()
-SET = CaselessKeyword('set').suppress()
-SEQUENCE = CaselessKeyword('sequence').suppress()
-MAPPING = CaselessKeyword('mapping').suppress()
-INDEX = CaselessKeyword('index').suppress()
-KEY = CaselessKeyword('key').suppress()
-CONTENT = CaselessKeyword('content').suppress()
-CLASS = CaselessKeyword('class').suppress()
-ARGUMENTS = CaselessKeyword('arguments').suppress()
-lpar = Literal('(').suppress()
-rpar = Literal(')').suppress()
-lbracket = Literal('[').suppress()
-rbracket = Literal(']').suppress()
-lbrace = Literal('{').suppress()
-rbrace = Literal('}').suppress()
-dot = Literal('.').suppress()
-comma = Literal(',').suppress()
-semicolon = Literal(';').suppress()
-equals = Literal('=').suppress()
+with PyParsingDefaultWhitespaceChars(' \n\t\r'):
+    predicate_name = Word(alphas, alphanums).setName('predicate name')
+    py_identifier = Word(alphas, alphanums).setName('python identifier')
+    py_qualified_identifier = Word(alphas, alphanums).setName('qualified python identifier')  # TODO: allow dots for modules
+    var = Word(alphas, alphanums).setName('variable')
+    integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
+    INPUT = CaselessKeyword('INPUT').suppress()
+    FOR = CaselessKeyword('for').suppress()
+    IN = CaselessKeyword('in').suppress()
+    OUTPUT = CaselessKeyword('OUTPUT').suppress()
+    PREDICATE = CaselessKeyword('predicate').suppress()
+    CONTAINER = CaselessKeyword('container').suppress()
+    SET = CaselessKeyword('set').suppress()
+    SEQUENCE = CaselessKeyword('sequence').suppress()
+    MAPPING = CaselessKeyword('mapping').suppress()
+    INDEX = CaselessKeyword('index').suppress()
+    KEY = CaselessKeyword('key').suppress()
+    CONTENT = CaselessKeyword('content').suppress()
+    CLASS = CaselessKeyword('class').suppress()
+    ARGUMENTS = CaselessKeyword('arguments').suppress()
+    lpar = Literal('(').suppress()
+    rpar = Literal(')').suppress()
+    lbracket = Literal('[').suppress()
+    rbracket = Literal(']').suppress()
+    lbrace = Literal('{').suppress()
+    rbrace = Literal('}').suppress()
+    dot = Literal('.').suppress()
+    comma = Literal(',').suppress()
+    semicolon = Literal(';').suppress()
+    equals = Literal('=').suppress()
 
 
-def InputSpecParser():
-    """Syntax of the INPUT statement."""
+def RawInputSpecParser():
+    '''Syntax of the INPUT statement (and nothing else).'''
+    # with PyParsingDefaultWhitespaceChars(' \n\t\r'):  TODO
     # Accessing objects, some examples:
     # - just access a variable directly:            node
     # - access a field on a variable:               node.label
@@ -90,8 +138,13 @@ def InputSpecParser():
     return input_statement
 
 
-def OutputSpecParser():
-    """Syntax of the OUTPUT statement."""
+def InputSpecParser():
+    '''Syntax of the INPUT statement (supports comments starting with '%').'''
+    return IgnoreComments(RawInputSpecParser())
+
+
+def RawOutputSpecParser():
+    '''Syntax of the OUTPUT statement (and nothing else).'''
     # TODO: We want one big OUTPUT statement??
     # # TODO: Order of clauses should be arbitrary
     # # TODO: Some clauses are optional
@@ -113,14 +166,24 @@ def OutputSpecParser():
     return OUTPUT
 
 
-def SpecParser():
-    """Syntax of the whole I/O mapping specification: One INPUT statement and multiple OUTPUT statements in any order."""
-    i = InputSpecParser().setResultsName('input')
-    o = OutputSpecParser().setResultsName('output')
+def OutputSpecParser():
+    '''Syntax of the OUTPUT statement (supports comments starting with '%').'''
+    return IgnoreComments(RawOutputSpecParser())
+
+
+def RawSpecParser():
+    '''Syntax of the whole I/O mapping specification: One INPUT statement and one OUTPUT statement in any order. This parser does not support comments.'''
+    i = RawInputSpecParser().setResultsName('input')
+    o = RawOutputSpecParser().setResultsName('output')
     p = Optional(i) & Optional(o)
     # collect input and output
     p.setParseAction(lambda t: (t.get('input'), t.get('output')))  # TODO
     return p
+
+
+def SpecParser():
+    '''Syntax of the whole I/O mapping specification: One INPUT statement and one OUTPUT statement in any order. This parser supports comments starting with '%'.'''
+    return IgnoreComments(RawOutputSpecParser())
 
 
 class EmbeddedSpecParser:
@@ -155,7 +218,7 @@ class EmbeddedSpecParser:
     #    p.ignore(asp_line)
     #    p.ignore(linebreak)
 
-    spec_parser = SpecParser()
+    spec_parser = RawSpecParser()
 
     # TODO:
     # A reasonable simplification might be to only allow %! comments for input specification at the start of a line,
@@ -163,15 +226,15 @@ class EmbeddedSpecParser:
     embedded_re = re.compile(r'''
         ^  # Start of each line (in MULTILINE mode)
         # The ASP part before comments
-        (
+        (?:
             [^\n%"]  # anything except newlines, comment start, and quotes
             |
             # Quoted string: any char except newlines/backslash/quotes, or backslash escape sequences
-            " ( [^\n\\"] | \\. )* "
+            " (?: [^\n\\"] | \\. )* "
         )*
         %\!                     # Our specification language is embedded in special %! comments
-        (?P<spec>[^\n%]*)       # The part we want to extract
-        (%.*)?                  # Comments in the specification language also start with % (like regular ASP comments)
+        (?P<spec> [^\n%]* )     # The part we want to extract
+        (?: %.* )?              # Comments in the specification language also start with % (like regular ASP comments)
         $  # end of each line (in MULTILINE mode)
     ''', re.MULTILINE | re.VERBOSE)
 
