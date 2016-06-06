@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString  # type: ignore
+from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore  # type: ignore
 from . import input as i
 import re
 
@@ -39,8 +39,8 @@ def ignore_comments(parser):
 # Common syntax elements
 with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     predicate_name = Word(alphas, alphanums).setName('predicate name')
-    py_identifier = Word(alphas, alphanums).setName('python identifier')
-    py_qualified_identifier = Word(alphas, alphanums).setName('qualified python identifier')  # TODO: allow dots for modules
+    py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
+    py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
     var = Word(alphas, alphanums).setName('variable')
     integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
     INPUT = CaselessKeyword('INPUT').suppress()
@@ -65,6 +65,7 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     rbrace = Literal('}').suppress()
     dot = Literal('.').suppress()
     comma = Literal(',').suppress()
+    colon = Literal(':').suppress()
     semicolon = Literal(';').suppress()
     equals = Literal('=').suppress()
 
@@ -125,25 +126,40 @@ def InputSpecParser():
 def RawOutputSpecParser():
     '''Syntax of the OUTPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-        # TODO: We want one big OUTPUT statement??
-        # # TODO: Order of clauses should be arbitrary
-        # # TODO: Some clauses are optional
-        # output_spec = Forward()
+        output_spec = Forward()
 
-        # arg = py_identifier | output_spec
-        # args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
-        # object_spec = CLASS + equals + py_qualified_identifier + comma + ARGUMENTS + equals + args
+        literal = integer | QuotedString('"', escChar='\\')
+        arg = literal | output_spec | py_identifier
+        args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
+        object_spec = py_qualified_identifier + lpar + args + rpar
 
-        # content = integer | (py_qualified_identifier + lpar + Group(Optional(integer + ZeroOrMore(comma + integer) + Optional(comma))) + rpar)
-        # set_spec = CONTAINER + equals + SET
-        # list_spec = CONTAINER + equals + SEQUENCE + comma + INDEX + equals + integer
-        # dict_spec = CONTAINER + equals + MAPPING + comma + KEY + equals + content
-        # container_spec = PREDICATE + equals + predicate_name + comma + (set_spec | list_spec | dict_spec) + comma + CONTENT + equals + content
+        asp_variable = Word(alphas)  # TODO: Must start with upper case?
+        asp_query = OneOrMore(CharsNotIn(';'))  # TODO: We need to parse this, to extract variable names etc.
 
-        # output_spec << (lbrace + (container_spec | object_spec) + rbrace)
-        # output_statement = OUTPUT + py_identifier + output_spec
-        # return output_statement
-        return OUTPUT
+        content = Forward()
+        content << (
+            literal
+            | (Optional(py_qualified_identifier) + lpar + Group(Optional(content + ZeroOrMore(comma + content) + Optional(comma))) + rpar)
+            | asp_variable  # Match asp_variable last so it won't consume any py_qualified_identifiers from the previous line
+        )
+
+        predicate_clause = (PREDICATE + colon + asp_query + semicolon)('predicate')
+        content_clause = (CONTENT + colon + content + semicolon)('content')
+        index_clause = (INDEX + colon + asp_variable + semicolon)('index')
+        key_clause = (KEY + colon + content + semicolon)('key')
+
+        simple_set_spec = SET + lbrace + predicate_name + rbrace
+        set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
+        sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
+        mapping_spec = MAPPING + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
+
+        output_spec << (simple_set_spec | set_spec | sequence_spec | mapping_spec | object_spec)
+        named_output_spec = py_identifier + equals + output_spec
+
+        output_statement = OUTPUT + lbrace + ZeroOrMore(named_output_spec) + rbrace
+        output_statement.setParseAction(lambda t: [None] if len(t) == 0 else t)
+        # TODO: Parse action to construct an OutputSpecification instance
+        return output_statement
 
 
 def OutputSpecParser():
