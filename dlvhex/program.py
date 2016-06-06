@@ -2,14 +2,13 @@ from typing import Optional
 from .solver import Solver, AnswerSetCollection
 from .input import InputSpecification  # flake8: noqa
 from .output import OutputSpecification  # flake8: noqa
-from .parser import EmbeddedSpecParser, parse
+from .parser import parse_embedded_spec
 
 __all__ = ['Program']
 
 
 class Program:
     '''Represents an answer set program.'''
-    PARSER = EmbeddedSpecParser()
 
     def __init__(self, *, filename: Optional[str] = None, code: Optional[str] = None) -> None:
         '''Initialize an answer set program.
@@ -26,8 +25,18 @@ class Program:
         if code is not None:
             self.append_code(code)
 
-    def parse_spec(self, code: str):
-        self.input_spec, self.output_spec = parse(Program.PARSER, code)
+    def parse_spec(self, code: str) -> None:
+        i, o = parse_embedded_spec(code)
+        if i is not None:
+            if self.input_spec is None:
+                self.input_spec = i
+            else:
+                raise ValueError("Only one INPUT specification per program is allowed.")
+        if o is not None:
+            if self.output_spec is None:
+                self.output_spec = o
+            else:
+                raise ValueError("Only one OUTPUT specification per program is allowed.")
 
     def append_file(self, filename: str, *, parse_io_spec: bool = True) -> None:
         '''Append ASP code contained in the given file to the program.

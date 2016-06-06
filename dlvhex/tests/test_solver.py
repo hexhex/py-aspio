@@ -1,7 +1,7 @@
 import unittest
 import re
 from ..program import Program
-from ..solver import Solver, SolverError
+from ..solver import SolverError
 
 
 class TestSolver(unittest.TestCase):

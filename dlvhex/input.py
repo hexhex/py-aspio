@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet, Tuple
 from typing.io import TextIO  # type: ignore
 import dlvhex
-from . import parser
+from .parser import parse_input_spec
 
 
 # type aliases
@@ -232,13 +232,7 @@ class InputPredicate:
 
 
 class InputSpecification:
-    _PARSER = None
-
-    @classmethod
-    def parse(cls, string: str):
-        if cls._PARSER is None:
-            cls._PARSER = parser.InputSpecParser()
-        return parser.parse(cls._PARSER, string)
+    parse = parse_input_spec
 
     def __init__(self, arguments: Sequence[Variable], predicates: Iterable[InputPredicate]) -> None:
         """Represents an INPUT statement, i.e. the complete input mapping description for an ASP program.

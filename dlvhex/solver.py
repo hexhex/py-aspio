@@ -4,6 +4,7 @@ from threading import Thread
 from typing import Any, Sequence, Iterable
 from .input import StreamAccumulator
 from .output import OutputSpecification
+from .parser import parse_answer_set
 from . import program as p  # flake8: noqa
 
 __all__ = ['SolverError', 'Solver']
@@ -203,8 +204,7 @@ class AnswerSet:
 
     def __init__(self, answer_set_string: str, output_spec: OutputSpecification) -> None:
         self.output_spec = output_spec
-        # TODO: Parse string
-        self.data = answer_set_string
+        self.data = parse_answer_set(answer_set_string)
 
     def __repr__(self):
         return repr(self.data)

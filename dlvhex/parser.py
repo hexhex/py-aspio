@@ -1,9 +1,15 @@
 from contextlib import contextmanager
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, Forward, ParseException, ParserElement, CharsNotIn, FollowedBy, White, StringEnd, restOfLine  # type: ignore
+from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString  # type: ignore
 from . import input as i
 import re
 
-__all__ = ['InputSpecParser']  # TODO
+__all__ = [
+    'parse_input_spec',
+    'parse_output_spec',
+    'parse_spec',
+    'parse_embedded_spec',
+    'parse_answer_set',
+]
 
 
 @contextmanager
@@ -220,16 +226,41 @@ class EmbeddedSpecParser:
         return '\n'.join(m.group('spec') for m in cls.embedded_re.finditer(string))
 
     def parseString(self, string, *, parseAll=True):
-        return (parse(type(self).spec_parser, type(self).extractFromString(string)),)
+        return (_parse(type(self).spec_parser, type(self).extractFromString(string)),)
 
 
 def AnswerSetParser():
+    '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-        # TODO: extract answer sets from dlvhex' output.
-        pass
+        quoted_string = QuotedString(quoteChar='"', escChar='\\')
+        constant_symbol = Word(alphas, alphanums)  # TODO: Check what dlvhex2 allows here (probably need at add underscores at least?)
+        arg = integer | quoted_string | constant_symbol
+        fact = predicate_name('pred') + Group(Optional(lpar + arg + ZeroOrMore(comma + arg) + rpar))('args')
+        answer_set = lbrace + Optional(fact + ZeroOrMore(comma + fact)) + rbrace  # + LineEnd()
+        #
+        fact.setParseAction(lambda t: (t.pred, tuple(t.args)))
+
+        def collect_facts(t):
+            d = {}
+            for (pred, args) in t:
+                if pred not in d:
+                    d[pred] = [args]
+                    # Note:
+                    # Technically we should use a set instead of a list here,
+                    # but dlvhex2 already performs the deduplication for us
+                    # so there is no need to check for collisions again.
+                    #
+                    # One problem:
+                    # dlvhex2 seems to consider abc and "abc" (quoted/non-quoted) different,
+                    # but on the python side it is represented by the same string 'abc'.
+                else:
+                    d[pred].append(args)
+            return d
+        answer_set.setParseAction(collect_facts)
+        return answer_set
 
 
-def parse(parser, string):
+def _parse(parser, string):
     try:
         result = parser.parseString(string, parseAll=True)
         return result[0]
@@ -240,18 +271,43 @@ def parse(parser, string):
     #     pass  # TODO
 
 
-# def _parse(parser, parse_fn, parse_arg):
-#     try:
-#         result = parse_fn(parser, parse_arg, parseAll=True)
-#         # result = parser.parseFile(file_or_filename, parseAll=True)
-#         # result = parser.parseString(string, parseAll=True)
-#         return result[0]
-#     except ParseException:
-#         # rethrow
-#         raise
-#     # except:
-#     #     pass  # TODO
-# def parseFile(parser, file_or_filename):
-#     return _parse(parser, parser.parseFile, file_or_filename)
-# def parseString(parser, string):
-#     return _parse(parser, parser.parseString, string)
+class LazyInit:
+    def __init__(self, constructor):
+        self._lazy_constructor = constructor
+        self._lazy_obj = None
+
+    @property
+    def lazy_obj(self):
+        if self._lazy_obj is None:
+            self._lazy_obj = self._lazy_constructor()
+        return self._lazy_obj
+
+    def __getattr__(self, name):
+        return getattr(self.lazy_obj, name)
+
+
+input_spec_parser = LazyInit(InputSpecParser)
+output_spec_parser = LazyInit(OutputSpecParser)
+spec_parser = LazyInit(SpecParser)
+embedded_spec_parser = LazyInit(EmbeddedSpecParser)
+answer_set_parser = LazyInit(AnswerSetParser)
+
+
+def parse_input_spec(string):
+    return _parse(input_spec_parser, string)
+
+
+def parse_output_spec(string):
+    return _parse(output_spec_parser, string)
+
+
+def parse_spec(string):
+    return _parse(spec_parser, string)
+
+
+def parse_embedded_spec(string):
+    return _parse(embedded_spec_parser, string)
+
+
+def parse_answer_set(string):
+    return _parse(answer_set_parser, string)

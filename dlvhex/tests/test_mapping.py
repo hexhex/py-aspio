@@ -25,13 +25,15 @@ class TestMapping(unittest.TestCase):
         acc = TestAccumulator()
         spec = InputSpecification.parse(r'''
             INPUT (xs, ys) {
-                p(x[0], x[1]) for x in set xs;
+                p(x[0], x[1]) for x in set xs;      % a comment about the spec
                 q(y) for x in xs for y in x;
                 r(xs[2][1]);
                 empty();
                 seq(i, x[0]) for (i, x) in sequence xs;
                 dict(value, key) for (key, value) in mapping ys;
-            }''')
+                % str(ys["abc"]);
+            } % comment at the end''')
+        # TODO: Allow access to string keys too! dict['abc']
         expected_result = {
             'p': set(xs),
             'q': set((y,) for x in xs for y in x),

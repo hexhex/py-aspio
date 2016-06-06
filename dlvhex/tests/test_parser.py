@@ -1,5 +1,5 @@
 import unittest
-from ..parser import EmbeddedSpecParser, InputSpecParser, parse, ParseException
+from ..parser import parse_embedded_spec, EmbeddedSpecParser, ParseException
 from ..input import InputSpecification
 
 
@@ -25,7 +25,7 @@ class TestParser(unittest.TestCase):
             'INPUT(){p();}',
         ]
         for valid_input in valid_inputs:
-            spec = parse(InputSpecParser(), valid_input)
+            spec = InputSpecification.parse(valid_input)
             self.assertTrue(isinstance(spec, InputSpecification))
 
     def test_invalid_input(self):
@@ -36,7 +36,7 @@ class TestParser(unittest.TestCase):
         ]
         for invalid_input in invalid_inputs:
             with self.assertRaises(ParseException):
-                parse(InputSpecParser(), invalid_input)
+                InputSpecification.parse(invalid_input)
 
     def test_embedded_parser(self):
         valid_embedded_specs = [
@@ -55,7 +55,7 @@ class TestParser(unittest.TestCase):
         ]
         for valid_embedded_spec in valid_embedded_specs:
             try:
-                parse(EmbeddedSpecParser(), valid_embedded_spec)
+                parse_embedded_spec(valid_embedded_spec)
             except ParseException as e:
                 self.fail("Error while parsing " + repr(valid_embedded_spec) + ": " + str(e))
 
