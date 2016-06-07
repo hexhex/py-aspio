@@ -34,7 +34,7 @@ class Solver:
         self.executable = executable or 'dlvhex2'
         self.encoding = Solver.default_encoding
 
-    def run(self, program: 'p.Program', input_args: Sequence[Any], cache: bool) -> 'AnswerSetCollection':
+    def run(self, program: 'p.Program', input_args: Sequence[Any], cache: bool) -> 'Results':
         '''Run the dlvhex solver on the given program.'''
         args = [
             self.executable,
@@ -64,7 +64,7 @@ class Solver:
         for code in program.code_parts:
             text_stdin.write(code)
         text_stdin.close()  # flush and close stream, dlvhex2 starts processing after this
-        return AnswerSetCollection(process=process, output_spec=program.output_spec, encoding=self.encoding, cache=cache)
+        return Results(process=process, output_spec=program.output_spec, encoding=self.encoding, cache=cache)
 
 
 class ProcessWrapper(Iterable):
@@ -176,14 +176,14 @@ class CachingIterable(Iterable):
                 del self.base_iterator  # release underlying object
 
 
-class AnswerSetCollection:
-    '''The result of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
+class Results:
+    '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
 
     def __init__(self, process: Popen, output_spec: OutputSpecification, encoding: str, cache: bool) -> None:
         self.answer_sets = (
-            AnswerSet(line, output_spec) for line in ProcessWrapper(process, encoding=encoding)
-        )  # type: Iterable[AnswerSet]
+            Result(line, output_spec) for line in ProcessWrapper(process, encoding=encoding)
+        )  # type: Iterable[Result]
         if cache:
             self.answer_sets = CachingIterable(self.answer_sets)
 
@@ -199,15 +199,15 @@ class AnswerSetCollection:
             yield getattr(answer_set, name)
 
 
-class AnswerSet:
+class Result:
     '''Represents a single answer set.'''
 
     def __init__(self, answer_set_string: str, output_spec: OutputSpecification) -> None:
-        self.output_spec = output_spec
-        self.data = parse_answer_set(answer_set_string)
+        self._output_spec = output_spec
+        self._data = parse_answer_set(answer_set_string)
 
     def __repr__(self):
-        return repr(self.data)
+        return repr(self._data)
 
     def __getattr__(self, name):
         # TODO: Generate object according to output_spec

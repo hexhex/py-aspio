@@ -1,6 +1,8 @@
 from contextlib import contextmanager
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore  # type: ignore
+from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore, originalTextFor  # type: ignore
+from typing import Iterable, Mapping, Union
 from . import input as i
+from . import output as o
 import re
 
 __all__ = [
@@ -129,36 +131,55 @@ def RawOutputSpecParser():
         output_spec = Forward()
 
         literal = integer | QuotedString('"', escChar='\\')
-        arg = literal | output_spec | py_identifier
+
+        # # TODO: Can we unify content_obj and object_spec for even more power?
+        # variable_or_reference = py_identifier
+        # expr = Forward()
+        # expr_obj_args = Group(Optional(content + ZeroOrMore(comma + expr) + Optional(comma)))
+        # expr_obj = Optional(py_qualified_identifier, default=None)('constructor') + lpar + expr_obj_args('args') + rpar
+        # expr << (literal | expr_collection | expr_obj | variable_or_reference)
+
+        output_spec_ref = py_identifier
+        arg = literal | output_spec | output_spec_ref
         args = Group(Optional(arg + ZeroOrMore(comma + arg) + Optional(comma)))
-        object_spec = py_qualified_identifier + lpar + args + rpar
+        object_spec = py_qualified_identifier('constructor') + lpar + args('args') + rpar
+        #
+        output_spec_ref.setParseAction(lambda t: o.Reference(t[0]))  # to distinguish from literal string values
+        object_spec.setParseAction(lambda t: o.OutputObject(t.constructor, t.args))
 
         asp_variable = Word(alphas)  # TODO: Must start with upper case?
-        asp_query = OneOrMore(CharsNotIn(';'))  # TODO: We need to parse this, to extract variable names etc.
+        asp_variable.setParseAction(lambda t: o.Variable(t[0]))  # to distinguish variable names from literal string values
+
+        asp_query = originalTextFor(OneOrMore(QuotedString('"', escChar='\\') | CharsNotIn(';', exact=1)))  # TODO: We need to parse this, to extract variable names etc.
 
         content = Forward()
-        content << (
-            literal
-            | (Optional(py_qualified_identifier) + lpar + Group(Optional(content + ZeroOrMore(comma + content) + Optional(comma))) + rpar)
-            | asp_variable  # Match asp_variable last so it won't consume any py_qualified_identifiers from the previous line
-        )
+        content_args = Group(Optional(content + ZeroOrMore(comma + content) + Optional(comma)))
+        content_obj = Optional(py_qualified_identifier, default=None)('constructor') + lpar + content_args('args') + rpar
+        content << (literal | content_obj | asp_variable)  # Match asp_variable last so it won't consume any py_qualified_identifiers from content_obj
+        #
+        content_obj.setParseAction(lambda t: o.Content(t.constructor, t.args))
 
         predicate_clause = (PREDICATE + colon + asp_query + semicolon)('predicate')
         content_clause = (CONTENT + colon + content + semicolon)('content')
         index_clause = (INDEX + colon + asp_variable + semicolon)('index')
         key_clause = (KEY + colon + content + semicolon)('key')
-
+        #
         simple_set_spec = SET + lbrace + predicate_name + rbrace
         set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
         sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
         mapping_spec = MAPPING + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
+        #
+        simple_set_spec.setParseAction(lambda t: o.OutputSimpleSet(t.predicate))
+        set_spec.setParseAction(lambda t: o.OutputSet(t.predicate, t.content))
+        sequence_spec.setParseAction(lambda t: o.OutputSequence(t.predicate, t.content, t.index))
+        mapping_spec.setParseAction(lambda t: o.OutputMapping(t.predicate, t.content, t.key))
 
         output_spec << (simple_set_spec | set_spec | sequence_spec | mapping_spec | object_spec)
-        named_output_spec = py_identifier + equals + output_spec
-
+        named_output_spec = py_identifier('name') + equals + output_spec('spec')
         output_statement = OUTPUT + lbrace + ZeroOrMore(named_output_spec) + rbrace
-        output_statement.setParseAction(lambda t: [None] if len(t) == 0 else t)
-        # TODO: Parse action to construct an OutputSpecification instance
+        #
+        named_output_spec.setParseAction(lambda t: (t.name, t.spec))
+        output_statement.setParseAction(lambda t: o.OutputSpecification(t))
         return output_statement
 
 
@@ -256,7 +277,7 @@ def AnswerSetParser():
         #
         fact.setParseAction(lambda t: (t.pred, tuple(t.args)))
 
-        def collect_facts(t):
+        def collect_facts(t) -> o.AnswerSet:
             d = {}
             for (pred, args) in t:
                 if pred not in d:
@@ -325,5 +346,5 @@ def parse_embedded_spec(string):
     return _parse(embedded_spec_parser, string)
 
 
-def parse_answer_set(string):
+def parse_answer_set(string: str) -> o.AnswerSet:
     return _parse(answer_set_parser, string)

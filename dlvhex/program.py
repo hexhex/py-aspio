@@ -2,7 +2,7 @@ import importlib
 from copy import copy
 from types import ModuleType
 from typing import Any, Callable, Iterable, MutableMapping, Optional, Union
-from .solver import Solver, AnswerSetCollection
+from .solver import Solver, Results
 from .input import InputSpecification  # flake8: noqa
 from .output import OutputSpecification  # flake8: noqa
 from .parser import parse_embedded_spec
@@ -77,7 +77,7 @@ class Program:
     #     pass
 
     # TODO: Maybe remove .solve and only use .__call__?
-    def solve(self, *input_arguments, solver: Solver = None, cache: bool = False) -> AnswerSetCollection:
+    def solve(self, *input_arguments, solver: Solver = None, cache: bool = False) -> Results:
         '''Solve the ASP program with the given input arguments and return a collection of answer sets.'''
         # TODO: Also allow to pass input arguments as keyword arguments, with names as defined in the input spec
         solver = solver or self.solver or Solver()

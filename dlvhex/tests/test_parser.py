@@ -47,6 +47,7 @@ class TestParser(unittest.TestCase):
             'OUTPUT{}',
             'OUTPUT{simple_nodes=set{node}}',
             'OUTPUT{static_object=SomeClass()}',
+            'OUTPUT{x=set{predicate:p("literal;with;semicolon");content:();}}',
             '''
                 OUTPUT {
                     % a comment about the output
