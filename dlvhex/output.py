@@ -18,31 +18,25 @@ class Variable():
         self.name = name
 
 
-class Content():
-    def __init__(self, constructor_name: Optional[str], args: Iterable[Union[int, str, 'Content', Variable]]) -> None:
-        self.constructor_name = constructor_name  # If None, we will construct a tuple
-        self.args = tuple(args)
-
-
-class OutputSpec(metaclass=ABCMeta):
+class Expr(metaclass=ABCMeta):
 
     # @abstractmethod
     def perform_mapping(self, facts: AnswerSet, context) -> Any:
         pass
 
 
-class OutputObject(OutputSpec):
-    def __init__(self, constructor_name: Optional[str], args: Iterable[Union[int, str, 'OutputSpec', Reference]]) -> None:
+class ExprObject(Expr):
+    def __init__(self, constructor_name: Optional[str], args: Iterable[Union[int, str, Expr, Variable, Reference]]) -> None:
         self.constructor_name = constructor_name  # If None, we will construct a tuple
         self.args = tuple(args)
 
 
-class OutputSet(OutputSpec):
-    def __init__(self, predicate_name: str, content: Content) -> None:
+class ExprSet(Expr):
+    def __init__(self, predicate_name: str, content: Expr) -> None:
         pass
 
 
-class OutputSimpleSet(OutputSpec):
+class ExprSimpleSet(Expr):
     def __init__(self, predicate_name: str) -> None:
         self.predicate_name = predicate_name
 
@@ -50,19 +44,19 @@ class OutputSimpleSet(OutputSpec):
         return set(facts.get(self.predicate_name, []))
 
 
-class OutputSequence(OutputSpec):
-    def __init__(self, predicate_name: str, content: Content, index: Variable) -> None:
+class ExprSequence(Expr):
+    def __init__(self, predicate_name: str, content: Expr, index: Variable) -> None:
         pass
 
 
-class OutputMapping(OutputSpec):
-    def __init__(self, predicate_name: str, content: Content, key: Content) -> None:
+class ExprMapping(Expr):
+    def __init__(self, predicate_name: str, content: Expr, key: Expr) -> None:
         pass
 
 
 class OutputSpecification:
 
-    def __init__(self, named_specs: Iterable[Tuple[str, OutputSpec]]) -> None:
+    def __init__(self, named_specs: Iterable[Tuple[str, Expr]]) -> None:
         specs = {}  # type: MutableMapping[str, OutputSpec]
         for (name, spec) in named_specs:
             if name not in specs:

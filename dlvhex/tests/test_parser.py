@@ -50,31 +50,47 @@ class TestParser(unittest.TestCase):
             'OUTPUT{x=set{predicate:p("literal;with;semicolon");content:();}}',
             '''
                 OUTPUT {
+                    i = 25,
+                    s = "hello",
+                    t = s
+                }
+            ''',
+            '''
+                OUTPUT {
+                    colored_nodes2 = sequence {
+                        predicate: color(X, C, I);
+                        index: I;
+                        content: ColoredNode(X, C, set { predicate: value(X, V); content: V; });   % TODO: how to implement things like this?
+                    }
+                }
+            ''',
+            '''
+                OUTPUT {
                     % a comment about the output
                     colored_tuples = sequence {
                         predicate: color(X, C, I);
                         index: I;
                         content: (X, C);
-                    }
+                    },
                     colored_nodes = sequence {
                         predicate: color(X, C, I);
                         index: I;
                         content: ColoredNode(X, C);
-                    }
-                    graph = mypackage.mymodule.Graph(colored_nodes)
+                    },
+                    graph = mypackage.mymodule.Graph(&colored_nodes),
                     graph2 = mypackage.mymodule.Graph2(
                         set { predicate: vertex(X); content: (X); },
                         set { arc },
-                        mypackage.mymodule.Blah(colored_nodes),
-                        colored_tuples,
-                    )
+                        mypackage.mymodule.Blah(&colored_nodes),
+                        &colored_tuples,
+                    ),
                     new_nodes = set {
                         predicate:
                             node(X),
                             color(X, C),
                             value(X, V);
                         content: Node(X, C, V);
-                    }
+                    },
                 }
             ''',
         ]
