@@ -3,7 +3,7 @@ from subprocess import Popen, PIPE
 from threading import Thread
 from typing import Any, Sequence, Iterable
 from .input import StreamAccumulator
-from .output import OutputSpecification
+from .output import OutputSpecification, Registry
 from .parser import parse_answer_set
 from . import program as p  # flake8: noqa
 
@@ -36,10 +36,17 @@ class Solver:
 
     def run(self, program: 'p.Program', input_args: Sequence[Any], cache: bool) -> 'Results':
         '''Run the dlvhex solver on the given program.'''
+        # No output specification given? This is equivalent to using an empty specification.
+        output_spec = program.output_spec or OutputSpecification([])
+
         args = [
             self.executable,
-            '--silent',     # only print the answer sets themselves
-            '--',           # tell dlvhex2 to read input from stdin, too
+            # only print the answer sets themselves
+            '--silent',
+            # only capture relevant predicates
+            '--filter=' + ','.join(output_spec.captured_predicates()),
+            # tell dlvhex2 to read input from stdin, too
+            '--'
         ]
         args.extend(program.file_parts)
         # TODO:
@@ -60,11 +67,19 @@ class Solver:
         # Map input data and pass it over stdin
         if program.input_spec is not None:
             program.input_spec.perform_mapping(input_args, StreamAccumulator(text_stdin))
+        # Additional rules required for output mapping
+        text_stdin.write('\n'.join(str(rule) for rule in output_spec.additional_rules()))
         # Pass code given as string over stdin
         for code in program.code_parts:
             text_stdin.write(code)
         text_stdin.close()  # flush and close stream, dlvhex2 starts processing after this
-        return Results(process=process, output_spec=program.output_spec, encoding=self.encoding, cache=cache)
+        return Results(
+            process=process,
+            output_spec=output_spec,
+            registry=program.local_registry,
+            encoding=self.encoding,
+            cache=cache
+        )
 
 
 class ProcessWrapper(Iterable):
@@ -180,9 +195,9 @@ class Results:
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
 
-    def __init__(self, process: Popen, output_spec: OutputSpecification, encoding: str, cache: bool) -> None:
+    def __init__(self, process: Popen, output_spec: OutputSpecification, registry: Registry, encoding: str, cache: bool) -> None:
         self.answer_sets = (
-            Result(line, output_spec) for line in ProcessWrapper(process, encoding=encoding)
+            Result(line, output_spec, registry) for line in ProcessWrapper(process, encoding=encoding)
         )  # type: Iterable[Result]
         if cache:
             self.answer_sets = CachingIterable(self.answer_sets)
@@ -202,14 +217,15 @@ class Results:
 class Result:
     '''Represents a single answer set.'''
 
-    def __init__(self, answer_set_string: str, output_spec: OutputSpecification) -> None:
-        self._output_spec = output_spec
-        self._data = parse_answer_set(answer_set_string)
+    def __init__(self, answer_set_string: str, output_spec: OutputSpecification, registry: Registry) -> None:
+        facts = parse_answer_set(answer_set_string)
+        self._ctx = output_spec.get_mapping_context(facts, registry)
 
-    def __repr__(self):
-        return repr(self._data)
+    def get(self, name):
+        return self._ctx.get_object(name)
 
     def __getattr__(self, name):
-        # TODO: Generate object according to output_spec
-        # Maybe store with setattr(self, name, obj)
-        raise AttributeError
+        try:
+            return self.get(name)
+        except ValueError as e:
+            raise AttributeError()

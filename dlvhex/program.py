@@ -1,10 +1,9 @@
-import importlib
 from copy import copy
 from types import ModuleType
-from typing import Any, Callable, Iterable, MutableMapping, Optional, Union
+from typing import Any, Iterable, MutableMapping, Optional, Union
 from .solver import Solver, Results
 from .input import InputSpecification  # flake8: noqa
-from .output import OutputSpecification  # flake8: noqa
+from .output import Constructor, OutputSpecification, Registry  # flake8: noqa
 from .parser import parse_embedded_spec
 
 __all__ = ['Program', 'register', 'import_from_module']
@@ -23,7 +22,7 @@ class Program:
         self.input_spec = None  # type: Optional[InputSpecification]
         self.output_spec = None  # type: Optional[OutputSpecification]
         self.solver = None  # type: Solver
-        self._local_registry = copy(_global_registry)  # TODO: Maybe the name registry should live in the output spec and not in the program?
+        self.local_registry = copy(_global_registry)  # TODO: Maybe the name registry should live in the output spec and not in the program?
         if filename is not None:
             self.append_file(filename)
         if code is not None:
@@ -63,11 +62,11 @@ class Program:
         if parse_io_spec:
             self.parse_spec(code)
 
-    def register(self, name: str, constructor: Callable[..., object], *, replace: bool = False) -> None:
-        self._local_registry.register(name, constructor, replace=replace)
+    def register(self, name: str, constructor: Constructor, *, replace: bool = False) -> None:
+        self.local_registry.register(name, constructor, replace=replace)
 
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-        self._local_registry.import_from_module(names, module_or_module_name, package)
+        self.local_registry.import_from_module(names, module_or_module_name, package)
 
     # TODO: We need some facility to correctly map class names for output
     # TODO: Also provide a @classmethod for registering (even though it introduces evil global state... Program should make a copy of the current global state when it is registered?)
@@ -88,33 +87,9 @@ class Program:
         return self.solve(*args, **kwargs)
 
 
-class Registry:
-    def __init__(self) -> None:
-        self._registered_names = {}  # type: MutableMapping[str, Callable[..., object]]
-
-    def __copy__(self) -> 'Registry':
-        other = Registry()
-        other._registered_names = copy(self._registered_names)
-        return other
-
-    def register(self, name: str, constructor: Callable[..., object], *, replace: bool = False) -> None:
-        if not replace and name in self._registered_names:
-            raise ValueError('Name {0} is already registered. Pass replace=True to re-register.'.format(name))
-        if not callable(constructor):
-            raise ValueError('constructor argument needs to be callable')
-        self._registered_names[name] = constructor
-
-    def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-        if isinstance(module_or_module_name, ModuleType):
-            module = module_or_module_name
-        else:
-            module = importlib.import_module(module_or_module_name, package=package)
-        for name in names:
-            self.register(name, getattr(module, name))
-
 _global_registry = Registry()
 
-def register(name: str, constructor: Callable[..., object], *, replace: bool = False) -> None:
+def register(name: str, constructor: Constructor, *, replace: bool = False) -> None:
     _global_registry.register(name, constructor, replace=replace)
 
 def import_from_module(names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:

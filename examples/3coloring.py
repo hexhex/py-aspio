@@ -28,10 +28,10 @@ def main():
     rs = prog.solve(nodes, edges, cache=True)
     print(rs)
     for i, x in enumerate(rs):
-        print(i, repr(x))
+        print(i, repr(x), repr(x.num), repr(x.s))
 
-    for i, x in enumerate(rs):
-        print(i, repr(x))
+    for x in rs.color2:
+        print(repr(x))
 
     for ans in prog(nodes, edges):
         print(ans)

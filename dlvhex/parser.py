@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore, originalTextFor  # type: ignore
-from typing import Iterable, Mapping, Union
+from typing import MutableMapping, List  # flake8: noqa
 from . import input as i
 from . import output as o
 import re
@@ -40,7 +40,7 @@ def ignore_comments(parser):
 
 # Common syntax elements
 with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-    predicate_name = Word(alphas, alphanums).setName('predicate name')
+    predicate_name = Word(alphas, alphanums + '_').setName('predicate name')  # TODO: which chars does dlvhex allow here?
     py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
     py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
     var = Word(alphas, alphanums).setName('variable')
@@ -129,9 +129,8 @@ def InputSpecParser():
 def RawOutputSpecParser():
     '''Syntax of the OUTPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-        output_spec = Forward()
-
         literal = integer | QuotedString('"', escChar='\\')
+        literal.setParseAction(lambda t: o.Literal(t[0]))  # not strictly necessary to wrap this, but it simplifies working with the syntax tree
 
         asp_variable = Word(alphas)  # TODO: Must start with upper case?
         asp_variable.setParseAction(lambda t: o.Variable(t[0]))  # to distinguish variable names from literal string values
@@ -147,12 +146,13 @@ def RawOutputSpecParser():
 
         expr = Forward()
 
-        predicate_clause = (PREDICATE + colon + asp_query + semicolon)('predicate')
-        content_clause = (CONTENT + colon + expr + semicolon)('content')
-        index_clause = (INDEX + colon + asp_variable + semicolon)('index')
-        key_clause = (KEY + colon + expr + semicolon)('key')
+        # TODO: Instead of semicolon, we could use (semicolon | FollowedBy(rbrace)) to make the last semicolon optional (but how would that work with asp_query...)
+        predicate_clause = PREDICATE + colon + asp_query('predicate') + semicolon
+        content_clause = CONTENT + colon + expr('content') + semicolon
+        index_clause = INDEX + colon + asp_variable('index') + semicolon
+        key_clause = KEY + colon + expr('key') + semicolon
         #
-        simple_set_spec = SET + lbrace + predicate_name + rbrace
+        simple_set_spec = SET + lbrace + predicate_name('predicate') + rbrace
         set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
         sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
         mapping_spec = MAPPING + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
@@ -265,7 +265,7 @@ def AnswerSetParser():
     '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
         quoted_string = QuotedString(quoteChar='"', escChar='\\')
-        constant_symbol = Word(alphas, alphanums)  # TODO: Check what dlvhex2 allows here (probably need at add underscores at least?)
+        constant_symbol = Word(alphas, alphanums + '_')  # TODO: Check what dlvhex2 allows here (probably need at add underscores at least?)
         arg = integer | quoted_string | constant_symbol
         fact = predicate_name('pred') + Group(Optional(lpar + arg + ZeroOrMore(comma + arg) + rpar))('args')
         answer_set = lbrace + Optional(fact + ZeroOrMore(comma + fact)) + rbrace  # + LineEnd()
@@ -273,7 +273,7 @@ def AnswerSetParser():
         fact.setParseAction(lambda t: (t.pred, tuple(t.args)))
 
         def collect_facts(t) -> o.AnswerSet:
-            d = {}
+            d = {}  # type: MutableMapping[str, List[o.FactArgumentTuple]]
             for (pred, args) in t:
                 if pred not in d:
                     d[pred] = [args]
@@ -287,7 +287,7 @@ def AnswerSetParser():
                     # but on the python side it is represented by the same string 'abc'.
                 else:
                     d[pred].append(args)
-            return d
+            return d  # type: ignore
         answer_set.setParseAction(collect_facts)
         return answer_set
 
