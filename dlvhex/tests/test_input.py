@@ -13,9 +13,9 @@ class TestAccumulator(FactAccumulator):
         self.facts[predicate].add(tuple(args))
 
 
-class TestMapping(unittest.TestCase):
+class TestInput(unittest.TestCase):
 
-    def test_mapping(self):
+    def test_input_mapping(self):
         xs = [(0, 0), (1, 2), ('abc', 'def'), (7, 'x')]
         ys = {
             0: 1,

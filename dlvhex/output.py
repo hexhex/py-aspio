@@ -1,9 +1,10 @@
-import importlib
 from abc import ABCMeta, abstractmethod
-from copy import copy
+from contextlib import contextmanager
 from itertools import chain
-from types import ModuleType
-from typing import Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping  # flake8: noqa
+from typing import AbstractSet, Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping, Sequence  # flake8: noqa
+from .errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesError, RedefinedNameError, UndefinedNameError
+from .registry import Registry
+from . import parser
 
 __all__ = [
     'OutputSpecification'
@@ -13,42 +14,13 @@ __all__ = [
 # It is stored as mapping from predicate names to a collection of argument tuples.
 FactArgumentTuple = Tuple[Union[int, str], ...]
 AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
-Constructor = Callable[..., object]
-
-
-class Registry:
-    def __init__(self) -> None:
-        self._registered_names = {}  # type: MutableMapping[str, Constructor]
-
-    def __copy__(self) -> 'Registry':
-        other = Registry()
-        other._registered_names = copy(self._registered_names)
-        return other
-
-    def register(self, name: str, constructor: Constructor, *, replace: bool = False) -> None:
-        if not replace and name in self._registered_names:
-            raise ValueError('Name {0} is already registered. Pass replace=True to re-register.'.format(name))
-        if not callable(constructor):
-            raise ValueError('constructor argument needs to be callable')
-        self._registered_names[name] = constructor
-
-    def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-        if isinstance(module_or_module_name, ModuleType):
-            module = module_or_module_name
-        else:
-            module = importlib.import_module(module_or_module_name, package=package)
-        for name in names:
-            self.register(name, getattr(module, name))
-
-    def get(self, name: str) -> Constructor:
-        return self._registered_names.get(name)
 
 
 ASPRule = str  # TODO: Could be a more sophisticated type to support passing the rule to dlvhex directly (when it is used via a shared library)
 
 
 class Context:
-    __is_being_mapped = object()
+    __object_is_being_mapped = object()  # sentinel value, used for cycle detection
 
     def __init__(self, toplevel: Mapping[str, 'Expr'], facts: AnswerSet, registry: Registry) -> None:
         self.toplevel = toplevel
@@ -59,15 +31,26 @@ class Context:
         # The objects created from the given facts and registry
         self.objs = {}  # type: MutableMapping[str, object]
 
-    def get_object(self, name):
+    def get_object(self, name: str) -> Any:
         if name not in self.objs:
             if name not in self.toplevel:
-                raise ValueError('No top-level mapping with name "{0}".'.format(name))
-            self.objs[name] = Context.__is_being_mapped  # for cycle detection
+                raise UndefinedNameError('No top-level mapping with name "{0}".'.format(name))
+            self.objs[name] = Context.__object_is_being_mapped
             self.objs[name] = self.toplevel[name].perform_mapping(self)
-        if self.objs[name] is Context.__is_being_mapped:
-            raise ValueError('cycle detected when trying to resolve name "{0}".'.format(name))
+        if self.objs[name] is Context.__object_is_being_mapped:
+            raise CircularReferenceError('Circular reference detected while trying to resolve name "{0}".'.format(name))
         return self.objs[name]
+
+    @contextmanager
+    def assign_variables(self, names: Sequence[str], values: Sequence[Any]):
+            assert len(names) == len(values)
+            for (name, value) in zip(names, values):
+                assert name not in self.va
+                self.va[name] = value
+            yield
+            for name in names:
+                del self.va[name]
+
 
 
 class Expr(metaclass=ABCMeta):
@@ -147,6 +130,7 @@ class ExprObject(Expr):
     def captured_predicates(self) -> Iterable[str]:
         return chain(*(subexpr.captured_predicates() for subexpr in self.args))
 
+
 class ExprSimpleSet(Expr):
     def __init__(self, predicate_name: str) -> None:
         self.predicate_name = predicate_name
@@ -159,61 +143,86 @@ class ExprSimpleSet(Expr):
         return [self.predicate_name]
 
 
-# TODO: Maybe make a common base class for ExprSet, ExprSequence and ExprMapping ("ExprCollection"?)
-class ExprSet(Expr):
-    def __init__(self, predicate: str, content: Expr) -> None:
+class ExprCollection(Expr):
+    def __init__(self, predicate: str, subexpressions: Sequence[Expr]) -> None:
         self.predicate = predicate
-        self.content = content
-        # TODO: Note the precondition somewhere: no predicate starting with pydlvhex__ may be used anywhere in the ASP program (or our additional rules will alter the program's meaning).
+        self.subexpressions = tuple(subexpressions)
+        # # TODO: Note the precondition somewhere: no predicate starting with pydlvhex__ may be used anywhere in the ASP program (or our additional rules will alter the program's meaning).
         self.output_predicate_name = 'pydlvhex__' + str(id(self))  # unique for as long as this object is alive
-        self.captured_variable_names = tuple(set(v.name for v in content.free_variables()))  # 'set' to remove duplicates, then 'tuple' to fix the order
+        self.captured_variable_names = tuple(set(var.name for expr in self.subexpressions for var in expr.free_variables()))  # 'set' to remove duplicates, then 'tuple' to fix the order
+        # TODO: See notes in test_argument_subset and think about whether that's the desired semantics (or if we should capture all referenced variables)
 
-    def additional_rules(self) -> str:
+    def additional_rules(self) -> Iterable[ASPRule]:
         rule = self.output_predicate_name + '(' + ','.join(self.captured_variable_names) + ') :- ' + self.predicate + '.'
-        return chain([rule], self.content.additional_rules())
+        return chain([rule], *(expr.additional_rules() for expr in self.subexpressions))
 
-    def perform_mapping(self, context: Context) -> Any:
+    def captured_predicates(self) -> Iterable[str]:
+        return chain([self.output_predicate_name], *(expr.captured_predicates() for expr in self.subexpressions))
+
+
+class ExprSet(ExprCollection):
+    def __init__(self, predicate: str, content: Expr) -> None:
+        super().__init__(predicate, [content])
+        self.content = content
+
+    def perform_mapping(self, context: Context) -> AbstractSet[Any]:
         # TODO: So far, a nested container can access variables from parent containers in the content clause, but cannot use it inside its query.
         # (well, it can be used, but it will be a "new" variable that cannot be referenced in the content clause)
         def content_for(captured_values):
-            assert len(self.captured_variable_names) == len(captured_values)
-            for (name, value) in zip(self.captured_variable_names, captured_values):
-                assert name not in context.va
-                context.va[name] = value
-            obj = self.content.perform_mapping(context)
-            for name in self.captured_variable_names:
-                del context.va[name]
-            return obj
+            with context.assign_variables(self.captured_variable_names, captured_values):
+                return self.content.perform_mapping(context)
         # TODO:
         # We might want to use a list here. Reasons:
         # * dlvhex2 already takes care of duplicates
         # * A set may only contain hashable objects, but a user might want to create custom classes in the output that aren't hashable
+        # * Actually a tuple would be better than a list, since tuples are hashable iff their contents are hashable (so the tuple could still be used as a dict key later)
+        # However:
+        # * A set may be used as dict key… in that case we need the contents not only to be free of duplicates, but also have a deterministic order.
+        #   Could be achieved by sorting the captured values as those only contain integers and strings, but in almost all cases that would be unnecessary work.
         return frozenset(content_for(captured_values) for captured_values in context.facts.get(self.output_predicate_name, []))
 
-    def captured_predicates(self) -> Iterable[str]:
-        return chain([self.output_predicate_name], self.content.captured_predicates())
 
-
-class ExprSequence(Expr):
+class ExprSequence(ExprCollection):
     def __init__(self, predicate: str, content: Expr, index: Variable) -> None:
-        pass
-    def perform_mapping(self, context: Context) -> Any:
-        raise NotImplementedError()
+        super().__init__(predicate, [content, index])
+        self.content = content
+        self.index = index
 
-    def additional_rules(self) -> str:
-        rule = self.output_predicate_name + '(' + ','.join(self.captured_variables) + ') :- ' + self.predicate + '. '
-        return chain([rule], self.content.additional_rules())
+    def perform_mapping(self, context: Context) -> Sequence[Any]:
+        index_pos = self.captured_variable_names.index(self.index.name)
+        def index_for(captured_values):
+            return captured_values[index_pos]
+        def content_for(captured_values):
+            with context.assign_variables(self.captured_variable_names, captured_values):
+                return self.content.perform_mapping(context)
+        # TODO: Options to determine how missing/duplicate indices should be handled
+        # Currently: We require the indices to form a range of integers from 0 to n without any duplicates.
+        all_captured_values = context.facts.get(self.output_predicate_name, [])
+        indices = sorted(index_for(captured_values) for captured_values in all_captured_values)
+        if indices != list(range(len(indices))):
+            raise InvalidIndicesError('not a valid range of indices')  # TODO: other error type and better message
+        xs = sorted((index_for(captured_values), content_for(captured_values)) for captured_values in all_captured_values)
+        return [x[1] for x in xs]
 
 
-class ExprMapping(Expr):
+class ExprMapping(ExprCollection):
     def __init__(self, predicate: str, content: Expr, key: Expr) -> None:
-        pass
-    def perform_mapping(self, context: Context) -> Any:
-        raise NotImplementedError()
+        super().__init__(predicate, [content, key])
+        self.content = content
+        self.key = key
 
-    def additional_rules(self) -> str:
-        rule = self.output_predicate_name + '(' + ','.join(self.captured_variables) + ') :- ' + self.predicate + '. '
-        return chain([rule], self.content.additional_rules(), self.key.additional_rules())
+    def perform_mapping(self, context: Context) -> Mapping[Any, Any]:
+        def obj_for(expr, captured_values):
+            with context.assign_variables(self.captured_variable_names, captured_values):
+                return expr.perform_mapping(context)
+        d = {}  # type: MutableMapping[Any, Any]
+        for captured_values in context.facts.get(self.output_predicate_name, []):
+            k = obj_for(self.key, captured_values)
+            if k not in d:
+                d[k] = obj_for(self.content, captured_values)
+            else:
+                raise DuplicateKeyError('Duplicate key: {0}'.format(repr(k)))
+        return d
 
 
 class OutputSpecification:
@@ -223,12 +232,16 @@ class OutputSpecification:
             if name not in exprs:
                 exprs[name] = expr
             else:
-                raise ValueError('duplicate name')  # TODO: more specific error
+                raise RedefinedNameError('Duplicate top-level name: {0}'.format(name))
         self.exprs = exprs  # type: Mapping[str, Expr]
         # TODO: Check for cycles in references (or we can do that while mapping)
         # TODO: Check for variables (undefined/redefined etc)
         for (name, expr) in self.exprs.items():
             expr.check(toplevel_name=name, bound_variables=[], bound_references=self.exprs.keys())
+
+    @staticmethod
+    def parse(string: str) -> 'OutputSpecification':
+        return parser.parse_output_spec(string)
 
     def get_mapping_context(self, facts: AnswerSet, registry: Registry) -> Context:
         return Context(self.exprs, facts, registry)

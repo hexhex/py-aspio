@@ -1,10 +1,12 @@
 import io
 from subprocess import Popen, PIPE
 from threading import Thread
-from typing import Any, Sequence, Iterable
+from typing import Any, Sequence, Iterable, Iterator
+from .errors import UndefinedNameError
 from .input import StreamAccumulator
-from .output import OutputSpecification, Registry
+from .output import OutputSpecification
 from .parser import parse_answer_set
+from .registry import Registry
 from . import program as p  # flake8: noqa
 
 __all__ = ['SolverError', 'Solver']
@@ -146,7 +148,7 @@ class ProcessWrapper(Iterable):
     def close(self) -> None:
         '''Shut down the process if it is still running. It is usually not necessary to call this method.'''
         if self.is_running():
-            print('calling terminate()')
+            print('calling terminate()')  # TODO (do we have to close stdout/stderr manually? I don't think so)
             self.process.terminate()
 
     def __del__(self) -> None:
@@ -161,8 +163,8 @@ class CachingIterable(Iterable):
     the CachingIterable only advances the underlying iterator when the element is actually requested.
 
     Supports multiple iterators,
-    but calls to next() on iterators constructed from instances of this class must be synchronized
-    if they are to be used from multiple threads.
+    but calls to next() on iterators constructed from instances of this class
+    must be synchronized if they are to be used from multiple threads.
     '''
 
     def __init__(self, base_iterable):
@@ -191,7 +193,7 @@ class CachingIterable(Iterable):
                 del self.base_iterator  # release underlying object
 
 
-class Results:
+class Results(Iterable['Result']):
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
 
@@ -202,14 +204,14 @@ class Results:
         if cache:
             self.answer_sets = CachingIterable(self.answer_sets)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator['Result']:
         if self.answer_sets is None:
             raise ValueError('Pass cache=True if you need to iterate over answer sets multiple times.')
         yield from self.answer_sets
         if not isinstance(self.answer_sets, CachingIterable):
             self.answer_sets = None
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         for answer_set in self:
             yield getattr(answer_set, name)
 
@@ -221,11 +223,11 @@ class Result:
         facts = parse_answer_set(answer_set_string)
         self._ctx = output_spec.get_mapping_context(facts, registry)
 
-    def get(self, name):
+    def get(self, name: str) -> Any:
         return self._ctx.get_object(name)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         try:
             return self.get(name)
-        except ValueError as e:
-            raise AttributeError()
+        except UndefinedNameError as e:
+            raise AttributeError(e)

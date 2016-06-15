@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore, originalTextFor  # type: ignore
 from typing import MutableMapping, List  # flake8: noqa
+from typing import Tuple, Union, Mapping, Iterable
 from . import input as i
 from . import output as o
 import re
@@ -88,9 +89,9 @@ def RawInputSpecParser():
         accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
 
         # Iterating over objects, some examples:
-        # - iterate over elements:                          for node in nodes
-        # - iterate over indices and elements of a list:    for (i, m) in node.neighbors
-        # - iterate over keys and elements of a dictionary: for (k, v) in some_dict
+        # - iterate over elements:                          for node in [set] nodes
+        # - iterate over indices and elements of a list:    for (i, m) in sequence node.neighbors
+        # - iterate over keys and elements of a dictionary: for (k, v) in mapping some_dict
         iteration_element = var('elem')
         iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
         set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')     # TODO: Ambiguity? Is "set" the SET keyword or a variable named "set"? (should be unambiguous since we can look at the following token? variable could be named "for" too). We could just forbid variable names that are keywords.
@@ -110,13 +111,15 @@ def RawInputSpecParser():
         #
         predicate_spec.setParseAction(lambda t: i.InputPredicate(t.pred, t.args, t.iters))
 
-        # TODO: Types? yes or no?
-        input_arg = var
+        # Allow optional type hints as in python3: https://www.python.org/dev/peps/pep-0484/
+        input_type = Forward()
+        input_type << (Literal('...') | (py_qualified_identifier + Group(Optional(lbracket + input_type + ZeroOrMore(comma + input_type)  + rbracket))))
+        input_arg = Group(var('name') + Optional(colon + input_type, default=None)('type'))
         input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
 
         input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace
         #
-        input_statement.setParseAction(lambda t: i.InputSpecification(t.args, t.preds))
+        input_statement.setParseAction(lambda t: i.InputSpecification((x.name for x in t.args), t.preds))
         return input_statement
 
 
@@ -154,6 +157,7 @@ def RawOutputSpecParser():
         #
         simple_set_spec = SET + lbrace + predicate_name('predicate') + rbrace
         set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
+        # TODO: add clause like "at_missing_index: skip;", "at_missing_index: 0;", "at_missing_index: None;"
         sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
         mapping_spec = MAPPING + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
         expr_collection = set_spec | simple_set_spec | sequence_spec | mapping_spec
@@ -261,6 +265,12 @@ class EmbeddedSpecParser:
         return (_parse(type(self).spec_parser, type(self).extractFromString(string)),)
 
 
+# These should actually be import from the .output module, but mypy currently does not support importing type aliases.
+# Until mypy fixes this, we just redefine the types here as a workaround.
+FactArgumentTuple = Tuple[Union[int, str], ...]
+AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
+
+
 def AnswerSetParser():
     '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
@@ -272,8 +282,8 @@ def AnswerSetParser():
         #
         fact.setParseAction(lambda t: (t.pred, tuple(t.args)))
 
-        def collect_facts(t) -> o.AnswerSet:
-            d = {}  # type: MutableMapping[str, List[o.FactArgumentTuple]]
+        def collect_facts(t) -> AnswerSet:
+            d = {}  # type: MutableMapping[str, List[FactArgumentTuple]]
             for (pred, args) in t:
                 if pred not in d:
                     d[pred] = [args]
@@ -341,5 +351,5 @@ def parse_embedded_spec(string):
     return _parse(embedded_spec_parser, string)
 
 
-def parse_answer_set(string: str) -> o.AnswerSet:
+def parse_answer_set(string: str) -> AnswerSet:
     return _parse(answer_set_parser, string)

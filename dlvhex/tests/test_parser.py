@@ -7,10 +7,10 @@ class TestParser(unittest.TestCase):
 
     def test_valid_input_spec(self):
         valid_input_specs = [
-            'INPUT(){}',
-            'INPUT(x){}',
-            'INPUT(){p();}',
-            '''
+            r'INPUT(){}',
+            r'INPUT(x){}',
+            r'INPUT(){p();}',
+            r'''
                 INPUT (
                     a,
                     obj,
@@ -37,25 +37,25 @@ class TestParser(unittest.TestCase):
             'INPUT ( )',  # no body
             'INPUT (x,y,z) { p(x, y) q(z) }',  # no semicolon after predicates
         ]
-        # TODO: Tests for invalid variable bindings (with assertRaises(UndefinedVariableError) etc.)
+        # TODO: Tests for invalid variable bindings (with assertRaises(UndefinedNameError) etc.)
         for invalid_input_spec in invalid_input_specs:
             with self.assertRaises(ParseException):
                 InputSpecification.parse(invalid_input_spec)
 
     def test_valid_output_spec(self):
         valid_output_specs = [
-            'OUTPUT{}',
-            'OUTPUT{simple_nodes=set{node}}',
-            'OUTPUT{static_object=SomeClass()}',
-            'OUTPUT{x=set{predicate:p("literal;with;semicolon");content:();}}',
-            '''
+            r'OUTPUT{}',
+            r'OUTPUT{simple_nodes=set{node}}',
+            r'OUTPUT{static_object=SomeClass()}',
+            r'OUTPUT{x=set{predicate:p("literal;with;semicolon");content:();}}',
+            r'''
                 OUTPUT {
                     i = 25,
                     s = "hello",
                     t = s
                 }
             ''',
-            '''
+            r'''
                 OUTPUT {
                     colored_nodes2 = sequence {
                         predicate: color(X, C, I);
@@ -64,7 +64,7 @@ class TestParser(unittest.TestCase):
                     }
                 }
             ''',
-            '''
+            r'''
                 OUTPUT {
                     % a comment about the output
                     colored_tuples = sequence {
@@ -125,17 +125,17 @@ class TestParser(unittest.TestCase):
                 self.fail("Error while parsing " + repr(valid_embedded_spec) + ": " + str(e))
 
     def test_embedded_parser_regex(self):
-        result = EmbeddedSpecParser.extractFromString("""
+        result = EmbeddedSpecParser.extractFromString(r'''
             % a normal asp comment
             % another asp comment  %! this should be IGNORED
             p(abc).    % comment behind predicate
             p(xyz1).
             %! this is what we want to parse
             p(def).   %! behind predicate % IGNORED % IGNORED too
-            p("quoted %!\\"string").  %! behind a quoted string containing percent
+            p("quoted %!\"string").  %! behind a quoted string containing percent
             q(X):-p(X).
             p("quoted"). % q("quoted but in comment").  %! means: this should be IGNORED.
-        """)
+        ''')
         self.assertEqual(result, '\n'.join(
             [
                 ' this is what we want to parse',

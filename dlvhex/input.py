@@ -4,8 +4,8 @@ from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet, Tuple
 from typing.io import TextIO  # type: ignore
 import dlvhex
-from .parser import parse_input_spec
-from .errors import UndefinedVariableError, RedefinedVariableError
+from . import parser
+from .errors import RedefinedNameError, UndefinedNameError
 
 
 # type aliases
@@ -21,8 +21,6 @@ class FactAccumulator(metaclass=ABCMeta):
 
 class StreamAccumulator(FactAccumulator):
     def __init__(self, output_stream: TextIO) -> None:
-        # if not isinstance(output_stream, io.TextIOBase):
-        #     raise ValueError("output_stream must be a text stream")
         if not output_stream.writable:
             raise ValueError("output_stream must be writable")
         self._stream = output_stream
@@ -66,7 +64,7 @@ class InputAccessor:
 
     def check_variable_bindings(self, bound_variables: AbstractSet[Variable]) -> None:
         if self._variable not in bound_variables:
-            raise UndefinedVariableError("Undefined variable {0} is being accessed".format(self._variable))
+            raise UndefinedNameError("Undefined variable {0} is being accessed".format(self._variable))
 
     def perform_access(self, variable_assignment: VariableAssignment) -> Any:
         """Performs the represented object access relative to the given variable assignment."""
@@ -97,7 +95,7 @@ class InputIteration(metaclass=ABCMeta):
     def _check_var_and_update(self, var: Variable, bound_variables: MutableSet[Variable]) -> None:
         """Helper function for subclasses. Add variable to given variable assignment, raising a ValueError if it is already contained."""
         if var in bound_variables:
-            raise RedefinedVariableError("Variable {0} is defined twice".format(var))
+            raise RedefinedNameError("Variable {0} is defined twice".format(var))
         bound_variables.add(var)
 
 
@@ -225,8 +223,6 @@ class InputPredicate:
 
 
 class InputSpecification:
-    parse = parse_input_spec
-
     def __init__(self, arguments: Sequence[Variable], predicates: Iterable[InputPredicate]) -> None:
         """Represents an INPUT statement, i.e. the complete input mapping description for an ASP program.
 
@@ -236,11 +232,15 @@ class InputSpecification:
         self._arguments = tuple(arguments)
         self._predicates = tuple(predicates)
         # Check for name errors in input arguments (i.e. there must not be duplicate names)
-        if len(arguments) != len(set(arguments)):
-            raise RedefinedVariableError("Input arguments must have unique names")
+        if len(self._arguments) != len(set(self._arguments)):
+            raise RedefinedNameError("Input arguments must have unique names")
         # Check for name errors in accessor and iteration definitions (two kinds of errors: either using an undefined variable name, or redefining a variable name)
         for pred in self._predicates:
             pred.check_variable_bindings(self._arguments)
+
+    @staticmethod
+    def parse(string: str) -> 'InputSpecification':
+        return parser.parse_input_spec(string)
 
     def perform_mapping(self, input_args: Sequence[Any], accumulator: FactAccumulator) -> None:
         """Perform the input mapping.

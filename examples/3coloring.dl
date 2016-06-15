@@ -1,4 +1,4 @@
-%! INPUT (nodes, edges) {
+%! INPUT (nodes: Iterable[Node], edges: Mapping[Node, Iterable[Node]]) {
 %!     node(n.label) for n in nodes;
 %!     edge(n.label, m.label) for (n, neighbors) in mapping edges for m in neighbors;
 %! }

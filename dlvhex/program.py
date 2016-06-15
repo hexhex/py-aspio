@@ -1,12 +1,12 @@
-from copy import copy
 from types import ModuleType
 from typing import Any, Iterable, MutableMapping, Optional, Union
 from .solver import Solver, Results
 from .input import InputSpecification  # flake8: noqa
-from .output import Constructor, OutputSpecification, Registry  # flake8: noqa
+from .output import OutputSpecification  # flake8: noqa
 from .parser import parse_embedded_spec
+from .registry import Constructor, Registry, LocalRegistry
 
-__all__ = ['Program', 'register', 'import_from_module']
+__all__ = ['Program']
 
 
 class Program:
@@ -22,7 +22,7 @@ class Program:
         self.input_spec = None  # type: Optional[InputSpecification]
         self.output_spec = None  # type: Optional[OutputSpecification]
         self.solver = None  # type: Solver
-        self.local_registry = copy(_global_registry)  # TODO: Maybe the name registry should live in the output spec and not in the program?
+        self.local_registry = LocalRegistry()  # type: Registry
         if filename is not None:
             self.append_file(filename)
         if code is not None:
@@ -85,12 +85,3 @@ class Program:
     def __call__(self, *args, **kwargs):
         '''Shorthand for the solve method.'''
         return self.solve(*args, **kwargs)
-
-
-_global_registry = Registry()
-
-def register(name: str, constructor: Constructor, *, replace: bool = False) -> None:
-    _global_registry.register(name, constructor, replace=replace)
-
-def import_from_module(names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-    _global_registry.import_from_module(names, module_or_module_name, package)
