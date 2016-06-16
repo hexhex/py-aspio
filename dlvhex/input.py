@@ -222,7 +222,7 @@ class InputPredicate:
                 iter_stack.append(it.get_collection_iterator(va))
 
 
-class InputSpecification:
+class InputSpec:
     def __init__(self, arguments: Sequence[Variable], predicates: Iterable[InputPredicate]) -> None:
         """Represents an INPUT statement, i.e. the complete input mapping description for an ASP program.
 
@@ -239,7 +239,11 @@ class InputSpecification:
             pred.check_variable_bindings(self._arguments)
 
     @staticmethod
-    def parse(string: str) -> 'InputSpecification':
+    def empty() -> 'InputSpec':
+        return InputSpec([], [])
+
+    @staticmethod
+    def parse(string: str) -> 'InputSpec':
         return parser.parse_input_spec(string)
 
     def perform_mapping(self, input_args: Sequence[Any], accumulator: FactAccumulator) -> None:

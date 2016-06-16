@@ -7,7 +7,7 @@ from .registry import Registry
 from . import parser
 
 __all__ = [
-    'OutputSpecification'
+    'OutputSpec'
 ]
 
 # An unprocessed answer set, i.e. simply a set of facts (not yet mapped to any objects).
@@ -35,8 +35,12 @@ class Context:
         if name not in self.objs:
             if name not in self.toplevel:
                 raise UndefinedNameError('No top-level mapping with name "{0}".'.format(name))
+            assert self.va == {}
             self.objs[name] = Context.__object_is_being_mapped
             self.objs[name] = self.toplevel[name].perform_mapping(self)
+            # We don't need to keep the raw data around after everything has been mapped
+            if len(self.toplevel) == len(self.facts):
+                del self.facts
         if self.objs[name] is Context.__object_is_being_mapped:
             raise CircularReferenceError('Circular reference detected while trying to resolve name "{0}".'.format(name))
         return self.objs[name]
@@ -225,7 +229,7 @@ class ExprMapping(ExprCollection):
         return d
 
 
-class OutputSpecification:
+class OutputSpec:
     def __init__(self, named_exprs: Iterable[Tuple[str, Expr]]) -> None:
         exprs = {}  # type: MutableMapping[str, Expr]
         for (name, expr) in named_exprs:
@@ -240,7 +244,11 @@ class OutputSpecification:
             expr.check(toplevel_name=name, bound_variables=[], bound_references=self.exprs.keys())
 
     @staticmethod
-    def parse(string: str) -> 'OutputSpecification':
+    def empty() -> 'OutputSpec':
+        return OutputSpec([])
+
+    @staticmethod
+    def parse(string: str) -> 'OutputSpec':
         return parser.parse_output_spec(string)
 
     def get_mapping_context(self, facts: AnswerSet, registry: Registry) -> Context:

@@ -1,6 +1,6 @@
 import unittest
 from ..parser import parse_output_spec, parse_embedded_spec, EmbeddedSpecParser, ParseException
-from ..input import InputSpecification
+from ..input import InputSpec
 
 
 class TestParser(unittest.TestCase):
@@ -26,8 +26,8 @@ class TestParser(unittest.TestCase):
         ]
         for valid_input_spec in valid_input_specs:
             try:
-                spec = InputSpecification.parse(valid_input_spec)
-                self.assertTrue(isinstance(spec, InputSpecification))
+                spec = InputSpec.parse(valid_input_spec)
+                self.assertTrue(isinstance(spec, InputSpec))
             except ParseException as e:
                 self.fail("Error while parsing " + repr(valid_input_spec) + ": " + str(e))
 
@@ -40,7 +40,7 @@ class TestParser(unittest.TestCase):
         # TODO: Tests for invalid variable bindings (with assertRaises(UndefinedNameError) etc.)
         for invalid_input_spec in invalid_input_specs:
             with self.assertRaises(ParseException):
-                InputSpecification.parse(invalid_input_spec)
+                InputSpec.parse(invalid_input_spec)
 
     def test_valid_output_spec(self):
         valid_output_specs = [

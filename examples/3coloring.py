@@ -25,15 +25,15 @@ def main():
         nb: [nc]
     }
 
-    rs = prog.solve(nodes, edges, cache=True)
-    print(rs)
-    for i, x in enumerate(rs):
-        print(i, repr(x), repr(x.num), repr(x.s))
+    with prog.solve(nodes, edges, cache=True) as results:
+        print(results)
+        for i, x in enumerate(results):
+            print(i, repr(x), repr(x.num), repr(x.s))
 
-    for x in rs.color2:
-        print(repr(x))
+        for x in results.color2:
+            print(repr(x))
 
-    for ans in prog(nodes, edges):
+    for ans in prog.solve(nodes, edges):  # works only because we exhaust the loop, but it's not meant to be used like this
         print(ans)
 
 

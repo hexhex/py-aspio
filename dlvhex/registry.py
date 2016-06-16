@@ -1,7 +1,7 @@
 import importlib
 from copy import copy
 from types import ModuleType
-from typing import Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping
+from typing import Callable, Iterable, Optional, Union
 
 __all__ = ['register', 'import_from_module']
 
@@ -43,8 +43,10 @@ def LocalRegistry() -> Registry:
 
 _global_registry = Registry()
 
+
 def register(name: str, constructor: Constructor, *, replace: bool = False) -> None:
     _global_registry.register(name, constructor, replace=replace)
+
 
 def import_from_module(names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
     _global_registry.import_from_module(names, module_or_module_name, package)

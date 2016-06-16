@@ -1,8 +1,8 @@
 from types import ModuleType
 from typing import Any, Iterable, MutableMapping, Optional, Union
-from .solver import Solver, Results
-from .input import InputSpecification  # flake8: noqa
-from .output import OutputSpecification  # flake8: noqa
+from .solver import Solver, Results, Result
+from .input import InputSpec  # flake8: noqa
+from .output import OutputSpec  # flake8: noqa
 from .parser import parse_embedded_spec
 from .registry import Constructor, Registry, LocalRegistry
 
@@ -19,8 +19,8 @@ class Program:
         '''
         self.file_parts = []  # type: List[str]
         self.code_parts = []  # type: List[str]
-        self.input_spec = None  # type: Optional[InputSpecification]
-        self.output_spec = None  # type: Optional[OutputSpecification]
+        self.input_spec = None  # type: Optional[InputSpec]
+        self.output_spec = None  # type: Optional[OutputSpec]
         self.solver = None  # type: Solver
         self.local_registry = LocalRegistry()  # type: Registry
         if filename is not None:
@@ -68,20 +68,17 @@ class Program:
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
         self.local_registry.import_from_module(names, module_or_module_name, package)
 
-    # TODO: We need some facility to correctly map class names for output
-    # TODO: Also provide a @classmethod for registering (even though it introduces evil global state... Program should make a copy of the current global state when it is registered?)
-    # def register(self, name: str, constructor: Any) -> None:
-    #     pass
-    # def import_(self, module: str) -> None:
-    #     pass
-
-    # TODO: Maybe remove .solve and only use .__call__?
-    def solve(self, *input_arguments, solver: Solver = None, cache: bool = False) -> Results:
-        '''Solve the ASP program with the given input arguments and return a collection of answer sets.'''
+    def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = False) -> Results:
+        '''Solve the ASP program with the given input arguments and return a collection of answer sets. Must call close() on the returned object, or use it as a context manager.'''
         # TODO: Also allow to pass input arguments as keyword arguments, with names as defined in the input spec
         solver = solver or self.solver or Solver()
         return solver.run(self, input_arguments, cache=cache)
 
-    def __call__(self, *args, **kwargs):
-        '''Shorthand for the solve method.'''
-        return self.solve(*args, **kwargs)
+    def solve_one(self, *input_arguments, solver: Optional[Solver] = None) -> Optional[Result]:
+        '''Solve the ASP program and return one of the computed answer sets, or None if no answer set exists. No special cleanup is necessary.'''
+        # TODO: Use additional solver option '--number=1'
+        with self.solve(*input_arguments, solver=solver, cache=False) as results:
+            try:
+                return next(iter(results))
+            except StopIteration:
+                return None

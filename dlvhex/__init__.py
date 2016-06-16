@@ -1,6 +1,6 @@
 from .errors import CircularReferenceError, InvalidIndicesError, RedefinedNameError, UndefinedNameError
-from .input import InputSpecification
-from .output import OutputSpecification
+from .input import InputSpec
+from .output import OutputSpec
 from .program import Program
 from .registry import register, import_from_module
 from .solver import Solver, SolverError
@@ -13,9 +13,9 @@ __all__ = [
     'RedefinedNameError',
     'UndefinedNameError',
     #
-    'InputSpecification',
+    'InputSpec',
     #
-    'OutputSpecification',
+    'OutputSpec',
     #
     'Program',
     #

@@ -4,6 +4,8 @@ __all__ = [
     'InvalidIndicesError',
     'RedefinedNameError',
     'UndefinedNameError',
+    'SolverError',
+    'SolverSubprocessError',
 ]
 
 
@@ -25,3 +27,16 @@ class RedefinedNameError(ValueError):
 
 class UndefinedNameError(ValueError):
     '''Raised when a name is referenced that is not bound at that location.'''
+
+
+class SolverError(Exception):
+    '''Raised when an error with the solver occurs.'''
+
+
+class SolverSubprocessError(SolverError):
+    '''Raised when the solver subprocess exits abnormally.'''
+    def __init__(self, returncode, stderr):
+        message = 'dlvhex2 terminated with return code {0}.\nOutput on stderr:\n{1}'.format(returncode, stderr)
+        super().__init__(message)
+        self.returncode = returncode
+        self.stderr = stderr

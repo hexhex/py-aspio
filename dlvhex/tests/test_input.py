@@ -1,7 +1,7 @@
 import unittest
 from collections import defaultdict
 from io import StringIO
-from ..input import InputSpecification, FactAccumulator, StreamAccumulator
+from ..input import InputSpec, FactAccumulator, StreamAccumulator
 
 
 class TestAccumulator(FactAccumulator):
@@ -23,7 +23,7 @@ class TestInput(unittest.TestCase):
             3: 'zzz'
         }
         acc = TestAccumulator()
-        spec = InputSpecification.parse(r'''
+        spec = InputSpec.parse(r'''
             INPUT (xs, ys) {
                 p(x[0], x[1]) for x in set xs;      % a comment about the spec
                 q(y) for x in xs for y in x;

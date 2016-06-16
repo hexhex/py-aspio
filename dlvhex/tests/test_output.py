@@ -1,5 +1,5 @@
 import unittest
-from ..output import OutputSpecification
+from ..output import OutputSpec
 from ..program import Program
 from ..errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesError, UndefinedNameError
 
@@ -7,7 +7,7 @@ from ..errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesEr
 class TestOutput(unittest.TestCase):
 
     def test_cycle_detection(self):
-        spec = OutputSpecification.parse(r'''
+        spec = OutputSpec.parse(r'''
             OUTPUT {
                 x = &y,
                 y = &x,
@@ -18,7 +18,7 @@ class TestOutput(unittest.TestCase):
             ctx.get_object('x')
 
     def test_undefined_toplevel_names(self):
-        result = next(iter(Program(code=r'%! OUTPUT { x = 25 }').solve()))
+        result = Program(code=r'%! OUTPUT { x = 25 }').solve_one()
         self.assertEqual(result.get('x'), 25)
         self.assertEqual(result.x, 25)
         with self.assertRaises(UndefinedNameError):
@@ -27,7 +27,7 @@ class TestOutput(unittest.TestCase):
             result.xxx
 
     def test_sequence(self):
-        xs = next(Program(code=r'''
+        xs = Program(code=r'''
             p(abc, 1).
             p(def, 0).
             p(xyz, 2).
@@ -35,23 +35,23 @@ class TestOutput(unittest.TestCase):
             %! OUTPUT {
             %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
             %! }
-        ''').solve().xs)
+        ''').solve_one().xs
         assert xs == ['def', 'abc', 'xyz']
 
     def test_sequence_with_invalid_indices(self):
         # missing index
         with self.assertRaises(InvalidIndicesError):
-            next(Program(code=r'''
+            Program(code=r'''
                 p(def, 0).
                 p(xyz, 2).
 
                 %! OUTPUT {
                 %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
                 %! }
-            ''').solve().xs)
+            ''').solve_one().xs
         # duplicate index
         with self.assertRaises(InvalidIndicesError):
-            next(Program(code=r'''
+            Program(code=r'''
                 p(abc, 1).
                 p(def, 0).
                 p(xyz, 1).
@@ -59,10 +59,10 @@ class TestOutput(unittest.TestCase):
                 %! OUTPUT {
                 %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
                 %! }
-            ''').solve().xs)
+            ''').solve_one().xs
 
     def test_mapping(self):
-        d = next(Program(code=r'''
+        d = Program(code=r'''
             p(abc, 1).
             p(def, 0).
             p(xyz, 2).
@@ -70,12 +70,12 @@ class TestOutput(unittest.TestCase):
             %! OUTPUT {
             %!  d = mapping { predicate: p(K, V); content: V; key: K; }
             %! }
-        ''').solve().d)
+        ''').solve_one().d
         assert d == {'def': 0, 'abc': 1, 'xyz': 2}
 
     def test_mapping_with_duplicate_keys(self):
         with self.assertRaises(DuplicateKeyError):
-            next(Program(code=r'''
+            Program(code=r'''
                 p(abc, 1).
                 p(abc, 0).
                 p(xyz, 2).
@@ -83,7 +83,7 @@ class TestOutput(unittest.TestCase):
                 %! OUTPUT {
                 %!  d = mapping { predicate: p(K, V); content: V; key: K; }
                 %! }
-            ''').solve().d)
+            ''').solve_one().d
 
     def test_argument_subset(self):
         class IdentityTuple:
@@ -107,7 +107,6 @@ class TestOutput(unittest.TestCase):
         # TODO: Are these the semantics we want?
         # Maybe we should use all referenced variables in the rule head, except if suppressed (variable name '_' for unused arguments, like in ASP)
         program.register('IdentityTuple', IdentityTuple)
-        xss = list(program().xs)
-        assert len(xss) == 1  # one answer set
-        xs = xss[0]
-        assert len(xs) == 1  # one object in the mapped 'xs' result
+        with program.solve().xs as xss:
+            for xs in xss:
+                assert len(xs) == 1  # one object in the mapped 'xs' result

@@ -119,7 +119,7 @@ def RawInputSpecParser():
 
         input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace
         #
-        input_statement.setParseAction(lambda t: i.InputSpecification((x.name for x in t.args), t.preds))
+        input_statement.setParseAction(lambda t: i.InputSpec((x.name for x in t.args), t.preds))
         return input_statement
 
 
@@ -178,7 +178,7 @@ def RawOutputSpecParser():
         output_statement = OUTPUT + lbrace + Optional(named_output_spec + ZeroOrMore(comma + named_output_spec) + Optional(comma)) + rbrace
         #
         named_output_spec.setParseAction(lambda t: (t.name, t.expr))
-        output_statement.setParseAction(lambda t: o.OutputSpecification(t))
+        output_statement.setParseAction(lambda t: o.OutputSpec(t))
         return output_statement
 
 
