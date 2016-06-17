@@ -6,6 +6,19 @@ from ..errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesEr
 
 class TestOutput(unittest.TestCase):
 
+    def test_do_not_leak_variables(self):
+        # not sure what it should raise, but it must be an error
+        # (currently AssertionError while mapping, later an UndefinedNameError would be better at parsing time)
+        with self.assertRaises(BaseException):
+            result = Program(code=r'''
+                %! OUTPUT {
+                %!  a = (X),
+                %!  b = set { predicate: p(X); content: (X, &a); }
+                %! }
+                p(1). p(2).
+                ''').solve_one()
+            result.get('b')
+
     def test_cycle_detection(self):
         spec = OutputSpec.parse(r'''
             OUTPUT {
@@ -14,8 +27,8 @@ class TestOutput(unittest.TestCase):
             }
         ''')
         with self.assertRaises(CircularReferenceError):
-            ctx = spec.get_mapping_context(None, None)
-            ctx.get_object('x')
+            r = spec.prepare_mapping(None, None)
+            r.get_object('x')
 
     def test_undefined_toplevel_names(self):
         result = Program(code=r'%! OUTPUT { x = 25 }').solve_one()

@@ -325,10 +325,10 @@ class Result:
     '''Represents a single answer set.'''
 
     def __init__(self, answer_set: AnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
-        self._ctx = output_spec.get_mapping_context(answer_set, registry)
+        self._r = output_spec.prepare_mapping(answer_set, registry)
 
     def get(self, name: str) -> Any:
-        return self._ctx.get_object(name)
+        return self._r.get_object(name)
 
     def __getattr__(self, name: str) -> Any:
         try:
