@@ -27,7 +27,7 @@ class TestOutput(unittest.TestCase):
             }
         ''')
         with self.assertRaises(CircularReferenceError):
-            r = spec.prepare_mapping(None, None)
+            r = spec.prepare_mapping({}, None)
             r.get_object('x')
 
     def test_undefined_toplevel_names(self):

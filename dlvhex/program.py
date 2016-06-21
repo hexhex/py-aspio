@@ -1,10 +1,10 @@
 from types import ModuleType
-from typing import Any, Iterable, MutableMapping, Optional, Union
+from typing import Iterable, Optional, Union
 from .solver import Solver, Results, Result
-from .input import InputSpec  # flake8: noqa
-from .output import OutputSpec  # flake8: noqa
+from .input import InputSpec  # noqa
+from .output import OutputSpec  # noqa
 from .parser import parse_embedded_spec
-from .registry import Constructor, Registry, LocalRegistry
+from .registry import Constructor, Registry, LocalRegistry  # noqa
 
 __all__ = ['Program']
 
@@ -70,8 +70,12 @@ class Program:
 
     def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = False) -> Results:
         '''Solve the ASP program with the given input arguments and return a collection of answer sets. Must call close() on the returned object, or use it as a context manager.'''
+        # TODO: Well, actually it is not strictly necessary to close() it, because the garbage collector will take care of that via __del__ (but that's not deterministic and leads to ResourceWarnings, if warnings are enabled -- but no actual leaks). --> "use a weakref callback" internally?
         # TODO: Also allow to pass input arguments as keyword arguments, with names as defined in the input spec
-        solver = solver or self.solver or Solver()
+        if solver is None:
+            solver = self.solver
+        if solver is None:
+            solver = Solver()
         return solver.run(self, input_arguments, cache=cache)
 
     def solve_one(self, *input_arguments, solver: Optional[Solver] = None) -> Optional[Result]:

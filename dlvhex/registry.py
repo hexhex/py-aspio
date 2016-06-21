@@ -1,7 +1,7 @@
 import importlib
 from copy import copy
 from types import ModuleType
-from typing import Callable, Iterable, MutableMapping, Optional, Union  # flake8: noqa
+from typing import Callable, Iterable, MutableMapping, Optional, Union  # noqa
 
 __all__ = ['register', 'import_from_module']
 

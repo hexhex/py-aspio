@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
-from typing import AbstractSet, Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping, Sequence  # flake8: noqa
+from typing import AbstractSet, Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping, Sequence  # noqa
 from .errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesError, RedefinedNameError, UndefinedNameError
 from .registry import Registry
 from . import parser
@@ -146,6 +146,7 @@ class ExprSimpleSet(Expr):
 
     def perform_mapping(self, r: OutputResult, lc: LocalContext) -> AbstractSet[FactArgumentTuple]:
         # Simple set semantics: just take the tuples as-is
+        # TODO: Should we unpack 1-tuples automatically?
         return frozenset(r.facts.get(self.predicate_name, []))
 
     def captured_predicates(self) -> Iterable[str]:
@@ -154,8 +155,8 @@ class ExprSimpleSet(Expr):
 
 # TODO: Separate ABC ExprComposed for the subexpressions? Could then use that in ExprObject too
 class ExprCollection(Expr):
-    def __init__(self, predicate: str, subexpressions: Sequence[Expr]) -> None:
-        self.predicate = predicate
+    def __init__(self, query: str, subexpressions: Sequence[Expr]) -> None:
+        self.query = query
         self.subexpressions = tuple(subexpressions)
         # # TODO: Note the precondition somewhere: no predicate starting with pydlvhex__ may be used anywhere in the ASP program (or our additional rules will alter the program's meaning).
         self.output_predicate_name = 'pydlvhex__' + str(id(self))  # unique for as long as this object is alive
@@ -163,7 +164,7 @@ class ExprCollection(Expr):
         # TODO: See notes in test_argument_subset and think about whether that's the desired semantics (or if we should capture all referenced variables)
 
     def additional_rules(self) -> Iterable[ASPRule]:
-        rule = self.output_predicate_name + '(' + ','.join(self.captured_variable_names) + ') :- ' + self.predicate + '.'
+        rule = self.output_predicate_name + '(' + ','.join(self.captured_variable_names) + ') :- ' + str(self.query) + '.'
         return chain([rule], *(expr.additional_rules() for expr in self.subexpressions))
 
     def captured_predicates(self) -> Iterable[str]:
@@ -171,8 +172,8 @@ class ExprCollection(Expr):
 
 
 class ExprSet(ExprCollection):
-    def __init__(self, predicate: str, content: Expr) -> None:
-        super().__init__(predicate, [content])
+    def __init__(self, query: str, content: Expr) -> None:
+        super().__init__(query, [content])
         self.content = content
 
     def perform_mapping(self, r: OutputResult, lc: LocalContext) -> AbstractSet[Any]:
@@ -189,12 +190,13 @@ class ExprSet(ExprCollection):
         # However:
         # * A set may be used as dict key… in that case we need the contents not only to be free of duplicates, but also have a deterministic order.
         #   Could be achieved by sorting the captured values as those only contain integers and strings, but in almost all cases that would be unnecessary work.
+        # TODO: Note the limitation somewhere (contents must be hashable), maybe mention it in the paper too
         return frozenset(content_for(captured_values) for captured_values in r.facts.get(self.output_predicate_name, []))
 
 
 class ExprSequence(ExprCollection):
-    def __init__(self, predicate: str, content: Expr, index: Variable) -> None:
-        super().__init__(predicate, [content, index])
+    def __init__(self, query: str, content: Expr, index: Variable) -> None:
+        super().__init__(query, [content, index])
         self.content = content
         self.index = index
 
@@ -210,14 +212,14 @@ class ExprSequence(ExprCollection):
         all_captured_values = r.facts.get(self.output_predicate_name, [])
         indices = sorted(index_for(captured_values) for captured_values in all_captured_values)
         if indices != list(range(len(indices))):
-            raise InvalidIndicesError('not a valid range of indices')  # TODO: other error type and better message
+            raise InvalidIndicesError('not a valid range of indices')  # TODO: better message
         xs = sorted((index_for(captured_values), content_for(captured_values)) for captured_values in all_captured_values)
         return [x[1] for x in xs]
 
 
 class ExprMapping(ExprCollection):
-    def __init__(self, predicate: str, content: Expr, key: Expr) -> None:
-        super().__init__(predicate, [content, key])
+    def __init__(self, query: str, content: Expr, key: Expr) -> None:
+        super().__init__(query, [content, key])
         self.content = content
         self.key = key
 
@@ -227,6 +229,7 @@ class ExprMapping(ExprCollection):
                 return expr.perform_mapping(r, lc)
         d = {}  # type: MutableMapping[Any, Any]
         for captured_values in r.facts.get(self.output_predicate_name, []):
+            # TODO: Note the limitation somewhere (keys must be hashable), maybe mention it in the paper too
             k = obj_for(self.key, captured_values)
             if k not in d:
                 d[k] = obj_for(self.content, captured_values)
@@ -244,7 +247,7 @@ class OutputSpec:
             else:
                 raise RedefinedNameError('Duplicate top-level name: {0}'.format(name))
         self.exprs = exprs  # type: Mapping[str, Expr]
-        # TODO: Check for cycles in references (or we can do that while mapping)
+        # TODO: Check for cycles in references (currently we do that while mapping, but for consistency it would be nice to have it checked at time of construction -- it is some additional work though, while we get the result 'for free' during mapping)
         # TODO: Check for variables (undefined/redefined etc)
         for (name, expr) in self.exprs.items():
             expr.check(toplevel_name=name, bound_variables=[], bound_references=self.exprs.keys())

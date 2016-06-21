@@ -1,47 +1,19 @@
 import io
-import os
 import signal
-import tempfile
-from subprocess import Popen, PIPE, TimeoutExpired
-from threading import Thread
-from typing import Any, Sequence, Iterable, Iterator, Tuple, Union, Mapping
+import weakref
+from subprocess import Popen, PIPE, TimeoutExpired  # type: ignore
+from typing import Any, Generic, Iterable, Iterator, Mapping, Sequence, Tuple, TypeVar, Union
 from .errors import UndefinedNameError, SolverError, SolverSubprocessError
+from .helper import CachingIterable, StreamCaptureThread, TemporaryNamedPipe
 from .input import InputSpec, StreamAccumulator
 from .output import OutputSpec
-from .parser import parse_answer_set
+from .parser import parse_answer_set, ParseException  # type: ignore
 from .registry import Registry
-from . import program as p  # flake8: noqa
+from . import program as p  # noqa
 
 __all__ = [
     'Solver',
 ]
-
-class TemporaryNamedPipe:
-    def __init__(self):
-        self.tmpdir = tempfile.TemporaryDirectory()  # creates a temporary directory, avoiding any race conditions
-        self.name = os.path.join(self.tmpdir.name, 'pydlvhex_fifo_' + str(id(self)))
-        if hasattr(os, 'mkfifo'):
-            try:
-                os.mkfifo(self.name)
-            except OSError as e:
-                raise  # rethrow
-        else:
-            # TODO: Windows version? http://stackoverflow.com/questions/13319679/createnamedpipe-in-python?lq=1
-            raise NotImplementedError()
-
-    def close(self):
-        # This will also remove the named pipe inside the directory
-        self.tmpdir.cleanup()
-
-    def __enter__(self):
-        return self.name
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-        return False
-
-    def __del__(self):
-        self.close()
 
 
 class Solver:
@@ -56,14 +28,18 @@ class Solver:
 
         @param executable The path to the dlvhex2 executable. If not specified, looks for "dlvhex2" in the current $PATH.
         '''
-        self.executable = executable or 'dlvhex2'
+        self.executable = executable if executable is not None else 'dlvhex2'
         self.encoding = Solver.default_encoding
 
     def run(self, program: 'p.Program', input_args: Sequence[Any], cache: bool) -> 'Results':
         '''Run the dlvhex solver on the given program.'''
         # No input/output spec given? This is equivalent to using an empty spec.
-        input_spec = program.input_spec or InputSpec.empty()
-        output_spec = program.output_spec or OutputSpec.empty()
+        input_spec = program.input_spec
+        if input_spec is None:
+            input_spec = InputSpec.empty()
+        output_spec = program.output_spec
+        if output_spec is None:
+            output_spec = OutputSpec.empty()
 
         with TemporaryNamedPipe() as tmp_input_name:
             args = [
@@ -97,14 +73,22 @@ class Solver:
                     text_stdin.write(code)
             # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
             return Results(
-                process_line_iter=DlvhexLineReader(process, self.encoding),
+                answer_sets=AnswerSetParserIterable(DlvhexLineReader(process, self.encoding)),
                 output_spec=output_spec,
                 registry=program.local_registry,
                 cache=cache
             )
 
 
-class DlvhexLineReader(Iterable):
+T = TypeVar('T', covariant=True)
+
+
+class ClosableIterable(Generic[T], Iterable[T]):
+    def close(self):
+        pass
+
+
+class DlvhexLineReader(ClosableIterable[str]):
     '''Wraps a process and provides its standard output for line-based iteration.
 
     It is only possible to iterate *once* over a DlvhexLineReader instance.
@@ -113,33 +97,30 @@ class DlvhexLineReader(Iterable):
     a SolverSubprocessError will be thrown during iteration, containing the return code and stderr output of the process.
     '''
 
-    class CaptureThread(Thread):
-        def __init__(self, stream):
-            super().__init__(daemon=True)
-            self.stream = stream
-            self.data = None
-
-        def run(self):
-            with self.stream as s:
-                self.data = s.read()
-
     def __init__(self, process: Popen, encoding: str) -> None:
         self.process = process
-        self.encoding = encoding
-        self.closed = False
+        self.stdout_encoding = encoding
+        # self.closed = False
         self.iterating = False
         #
         # We need to capture stderr in a background thread to avoid deadlocks.
         # (The problem would occur when dlvhex2 is blocked because the OS buffers on the stderr pipe are full... so we have to constantly read from *both* stdout and stderr)
-        self.stderr_capture_thread = DlvhexLineReader.CaptureThread(self.process.stderr)
+        self.stderr_capture_thread = StreamCaptureThread(self.process.stderr)
         self.stderr_capture_thread.start()
+        #
+        # Set up finalization. Using weakref.finalize seems to work more robustly than using __del__.
+        # (One problem that occurred with __del__: It seemed like python was calling __del__ for self.process and its IO streams first,
+        # which resulted in ResourceWarnings even though we were closing the streams properly in our __del__ function.)
+        self.__close = DlvhexLineReader.__CloseHelper(process, self.stderr_capture_thread, encoding)
+        f = weakref.finalize(self, self.__close)  # type: ignore
+        f.atexit = True  # make sure the subprocess will be terminated if it's still running when the python process exits
 
-    def __iter__(self):
-        '''Return an iterator over the lines written to stdout. May only be called once!'''
+    def __iter__(self) -> Iterator[str]:
+        '''Return an iterator over the lines written to stdout. May only be called once! Might raise a SolverSubprocessError.'''
         assert not self.iterating, 'You may only iterate once over a single DlvhexLineReader instance.'
         self.iterating = True
         # Requirement: dlvhex2 needs to flush stdout after every line
-        with io.TextIOWrapper(self.process.stdout, encoding=self.encoding) as stdout_lines:
+        with io.TextIOWrapper(self.process.stdout, encoding=self.stdout_encoding) as stdout_lines:
             for line in stdout_lines:
                 yield line
                 # Tell dlvhex2 to prepare the next answer set
@@ -152,26 +133,30 @@ class DlvhexLineReader(Iterable):
         #   1. we got all answer sets, or
         #   2. an error occurred,
         # and dlvhex closed stdout (and probably terminated).
-        # Give it a chance to terminate
+        # Give it a chance to terminate gracefully.
         try:
             self.process.wait(timeout=0.005)
         except TimeoutExpired:
             pass
         self.close()
 
-    def is_running(self):
-        '''True iff the process is still running.'''
-        return self.process.poll() is None
-
-    def error(self):
-        '''True iff the process terminated with error.'''
-        return self.process.poll() not in (None, 0)
-
     def close(self) -> None:
-        '''Shut down the process if it is still running. Raises a SolverSubprocessError '''
-        if self.closed:
-            return
-        try:
+        '''Shuts down the process if it is still running. Raises a SolverSubprocessError if the process exited with an error.'''
+        self.__close()
+
+    # We need to do destruction in a separate class to avoid reference cycles.
+    class __CloseHelper:
+        def __init__(self, process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str) -> None:
+            self.process = process
+            self.stderr_capture_thread = stderr_capture_thread
+            self.stderr_encoding = stderr_encoding
+
+        def is_running(self) -> bool:
+            '''True iff the process is still running.'''
+            return self.process.poll() is None
+
+        def __call__(self) -> None:
+            '''Shuts down the process if it is still running. Raises a SolverSubprocessError if the process exited with an error.'''
             if self.is_running():
                 # Still running? Kill the subprocess
                 self.process.terminate()
@@ -179,72 +164,27 @@ class DlvhexLineReader(Iterable):
                     self.process.wait(timeout=0.001)
                 except TimeoutExpired:
                     # Kill unconditionally after a short timeout.
-                    # A problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
+                    # A potential problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
                     self.process.kill()
                     self.process.wait()
                 assert not self.is_running()
-                # If the process was still running and we terminated it via SIGTERM or SIGKILL, don't process the return code and stderr.
-                # I have observed various outcomes that do not signify a real error condition as far as py-dlvhex is concerned:
-                # * dlvhex2 simply terminates between the is_running() check and the terminate() call
+                # Various outcomes were observed that do not signify a real error condition as far as py-dlvhex is concerned:
+                # * dlvhex2 simply terminates by itself between the is_running() check and the terminate() call
                 # * dlvhex2 executes its SIGTERM handler and exits with code 2, and a message on stderr ("dlvhex2 [...] got termination signal 15")
                 # * dlvhex2 doesn't have its SIGTERM handler active and the default handler exits with code -15
-                # * dlvhex2 hangs after receiving SIGTERM (maybe when it's blocking on stdout? we're not reading from it anymore), so we send SIGKILL after the timeout and it exits with -9
-                # * dlvhex2 receives SIGTERM and crashes with "Assertion failed: (!res), function ~mutex, file /usr/local/include/boost/thread/pthread/mutex.hpp, line 111", exit code -6 (SIGABRT)
+                # * dlvhex2 hangs after receiving SIGTERM (maybe when it's blocking on stdout? we're not reading from it anymore at this point), so we send SIGKILL after the timeout and it exits with -9
+                # * dlvhex2 receives SIGTERM and crashes with "Assertion failed: (!res), function ~mutex, file /usr/local/include/boost/thread/pthread/mutex.hpp, line 111", and exit code -6 (SIGABRT)
                 if self.process.returncode in (2, -signal.SIGTERM, -signal.SIGKILL, -signal.SIGABRT):
                     # In the cases mentioned above (and only if we called terminate()), don't throw an exception
                     self.process.returncode = 0
-
-            if self.error():
-                self.stderr_capture_thread.join()
-                raise SolverSubprocessError(self.process.returncode, str(self.stderr_capture_thread.data, encoding=self.encoding))
-        finally:
-            self.process.stdin.close()  # Note: only close stdin after terminate(), otherwise dlvhex will start outputting everything at once
+            # Note: only close stdin after the process has been terminated, otherwise dlvhex will start outputting everything at once
+            self.process.stdin.close()
             self.process.stdout.close()
-            self.closed = True
-
-    def __del__(self) -> None:
-        if not self.closed:
-            import warnings
-            warnings.warn('dlvhex subprocess not cleaned up', ResourceWarning)
-        self.close()
-
-
-class CachingIterable(Iterable):
-    '''Caches the contents of an iterable.
-
-    Similar to calling list() on an iterable.
-    However, where list() would finish the whole iteration before returning,
-    the CachingIterable only advances the underlying iterator when the element is actually requested.
-
-    Supports multiple iterators,
-    but calls to next() on iterators constructed from instances of this class
-    must be synchronized if they are to be used from multiple threads.
-    '''
-
-    def __init__(self, base_iterable):
-        self.base_iterator = iter(base_iterable)
-        self.cache = []
-        self.done = False
-
-    def __iter__(self):
-        pos = 0
-        while True:
-            if pos < len(self.cache):
-                yield self.cache[pos]
-                pos += 1
-            elif self.done:
-                break
-            else:
-                self._generate_next()
-
-    def _generate_next(self):
-        if not self.done:
-            try:
-                value = next(self.base_iterator)
-                self.cache.append(value)
-            except StopIteration:
-                self.done = True
-                del self.base_iterator  # release underlying object
+            self.stderr_capture_thread.join()  # ensure cleanup of stderr
+            if self.process.returncode != 0:
+                err = SolverSubprocessError(self.process.returncode, str(self.stderr_capture_thread.data, encoding=self.stderr_encoding))
+                self.process.returncode = 0  # make sure we only raise an error once
+                raise err
 
 
 # These should actually be import from the .output module, but mypy currently does not support importing type aliases.
@@ -253,26 +193,36 @@ FactArgumentTuple = Tuple[Union[int, str], ...]
 AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
 
 
+class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
+    def __init__(self, lines: ClosableIterable[str]) -> None:
+        self.lines = lines
+
+    def __iter__(self) -> Iterator[AnswerSet]:
+        for line in self.lines:
+            try:
+                yield parse_answer_set(line)
+            except ParseException:
+                e = SolverError('Unable to parse answer set received from solver')
+                e.line = line  # type: ignore
+                raise e
+
+    def close(self):
+        self.lines.close()
+
+
 class Results(Iterable['Result']):
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
 
-    def __init__(self, process_line_iter, output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
+    def __init__(self, answer_sets: ClosableIterable[AnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
         self.output_spec = output_spec
         self.registry = registry
-        self.process_line_iter = process_line_iter
-        self.results = map(self._make_result, self.process_line_iter)  # type: Iterable[Result]
+        self.answer_sets = answer_sets
+        self.results = (
+            Result(answer_set, self.output_spec, self.registry) for answer_set in self.answer_sets
+        )  # type: Iterable[Result]
         if cache:
             self.results = CachingIterable(self.results)
-
-    def _make_result(self, answer_set_string: str) -> 'Result':
-        try:
-            answer_set = parse_answer_set(answer_set_string)
-        except ParseError:
-            e = SolverError('Unable to parse answer set received from solver')
-            e.answer_set = answer_set
-            raise e
-        return Result(answer_set, self.output_spec, self.registry)
 
     def __iter__(self) -> Iterator['Result']:
         # Make sure we can only create one results iterator if we aren't caching
@@ -285,13 +235,13 @@ class Results(Iterable['Result']):
     def __getattr__(self, name: str) -> Any:
         return ResultsAttributeIterator(self, name)
 
-    def close(self):
-        self.process_line_iter.close()
+    def close(self) -> None:
+        self.answer_sets.close()
 
-    def __enter__(self):
+    def __enter__(self) -> 'Results':
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback) -> bool:
         self.close()
         return False
 

@@ -33,7 +33,7 @@ def main():
         for x in results.color2:
             print(repr(x))
 
-    for ans in prog.solve(nodes, edges):  # works only because we exhaust the loop, but it's not meant to be used like this
+    for ans in prog.solve(nodes, edges):
         print(ans)
 
 
