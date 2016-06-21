@@ -1,10 +1,28 @@
+import re
 from contextlib import contextmanager
-from pyparsing import alphas, alphanums, nums, CaselessKeyword, Group, Optional, ZeroOrMore, Word, Literal, ParseException, ParserElement, restOfLine, QuotedString, Forward, CharsNotIn, OneOrMore, originalTextFor  # type: ignore
-from typing import MutableMapping, List  # flake8: noqa
-from typing import Tuple, Union, Mapping, Iterable
+from pyparsing import (
+    alphas,
+    alphanums,
+    nums,
+    originalTextFor,
+    restOfLine,
+    srange,
+    CaselessKeyword,
+    CharsNotIn,
+    Forward,
+    Group,
+    Literal,
+    OneOrMore,
+    Optional,
+    ParseException,
+    ParserElement,
+    QuotedString,
+    Word,
+    ZeroOrMore,
+)  # type: ignore
+from typing import Iterable, List, Mapping, MutableMapping, Tuple, Union  # noqa
 from . import input as i
 from . import output as o
-import re
 
 __all__ = [
     'parse_input_spec',
@@ -41,11 +59,16 @@ def ignore_comments(parser):
 
 # Common syntax elements
 with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-    predicate_name = Word(alphas, alphanums + '_').setName('predicate name')  # TODO: which chars does dlvhex allow here?
+    alphas_lowercase = srange("[a-z]")
+    alphas_uppercase = srange("[A-Z]")
+    predicate_name = Word(alphas_lowercase, alphanums + '_').setName('predicate name')
+    # Currently we only support ASCII identifiers for the python side.
+    # Python (starting with version 3.0) supports additional characters in identifiers, see https://docs.python.org/3/reference/lexical_analysis.html#identifiers
+    # It would be nice to support the same set, but it's not absolutely necessary.
     py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
     py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
     var = Word(alphas, alphanums).setName('variable')
-    integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
+    integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))  # TODO: maybe we should rename this to "posinteger" or something like this
     INPUT = CaselessKeyword('INPUT').suppress()
     FOR = CaselessKeyword('for').suppress()
     IN = CaselessKeyword('in').suppress()
@@ -113,7 +136,7 @@ def RawInputSpecParser():
 
         # Allow optional type hints as in python3: https://www.python.org/dev/peps/pep-0484/
         input_type = Forward()
-        input_type << (Literal('...') | (py_qualified_identifier + Group(Optional(lbracket + input_type + ZeroOrMore(comma + input_type)  + rbracket))))
+        input_type << (Literal('...') | (py_qualified_identifier + Group(Optional(lbracket + input_type + ZeroOrMore(comma + input_type) + rbracket))))
         input_arg = Group(var('name') + Optional(colon + input_type, default=None)('type'))
         input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
 
@@ -135,8 +158,10 @@ def RawOutputSpecParser():
         literal = integer | QuotedString('"', escChar='\\')
         literal.setParseAction(lambda t: o.Literal(t[0]))  # not strictly necessary to wrap this, but it simplifies working with the syntax tree
 
-        asp_variable = Word(alphas)  # TODO: Must start with upper case?
-        asp_variable.setParseAction(lambda t: o.Variable(t[0]))  # to distinguish variable names from literal string values
+        asp_variable_name = Word(alphas_uppercase, alphanums + '_')
+        # asp_variable_anonymous = Literal('_')
+        # asp_variable = asp_variable_anonymous | asp_variable_name
+        asp_variable_name.setParseAction(lambda t: o.Variable(t[0]))  # to distinguish variable names from literal string values
 
         # TODO:
         # Instead of explicitly marking references with '&', we might just define a convention as follows:
@@ -150,9 +175,9 @@ def RawOutputSpecParser():
         expr = Forward()
 
         # TODO: Instead of semicolon, we could use (semicolon | FollowedBy(rbrace)) to make the last semicolon optional (but how would that work with asp_query...)
-        predicate_clause = PREDICATE + colon + asp_query('predicate') + semicolon
+        predicate_clause = PREDICATE + colon + asp_query('query') + semicolon
         content_clause = CONTENT + colon + expr('content') + semicolon
-        index_clause = INDEX + colon + asp_variable('index') + semicolon
+        index_clause = INDEX + colon + asp_variable_name('index') + semicolon
         key_clause = KEY + colon + expr('key') + semicolon
         #
         simple_set_spec = SET + lbrace + predicate_name('predicate') + rbrace
@@ -163,19 +188,20 @@ def RawOutputSpecParser():
         expr_collection = set_spec | simple_set_spec | sequence_spec | mapping_spec
         #
         simple_set_spec.setParseAction(lambda t: o.ExprSimpleSet(t.predicate))
-        set_spec.setParseAction(lambda t: o.ExprSet(t.predicate, t.content))
-        sequence_spec.setParseAction(lambda t: o.ExprSequence(t.predicate, t.content, t.index))
-        mapping_spec.setParseAction(lambda t: o.ExprMapping(t.predicate, t.content, t.key))
+        set_spec.setParseAction(lambda t: o.ExprSet(t.query, t.content))
+        sequence_spec.setParseAction(lambda t: o.ExprSequence(t.query, t.content, t.index))
+        mapping_spec.setParseAction(lambda t: o.ExprMapping(t.query, t.content, t.key))
 
         expr_obj_args = Group(Optional(expr + ZeroOrMore(comma + expr) + Optional(comma)))
         expr_obj = Optional(py_qualified_identifier, default=None)('constructor') + lpar + expr_obj_args('args') + rpar
         #
         expr_obj.setParseAction(lambda t: o.ExprObject(t.constructor, t.args))
 
-        expr << (literal | expr_collection | expr_obj | reference | asp_variable)
+        # Note: "|" always takes the first match, that's why we have to parse variable names after obj (otherwise "variable name" might consume the identifier of expr_obj)
+        expr << (literal | expr_collection | expr_obj | reference | asp_variable_name)
 
         named_output_spec = py_identifier('name') + equals + expr('expr')
-        output_statement = OUTPUT + lbrace + Optional(named_output_spec + ZeroOrMore(comma + named_output_spec) + Optional(comma)) + rbrace
+        output_statement = OUTPUT + lbrace + Optional(named_output_spec + ZeroOrMore(comma + named_output_spec) + Optional(comma)) + rbrace  # TODO: maybe use semicolon as separator here too
         #
         named_output_spec.setParseAction(lambda t: (t.name, t.expr))
         output_statement.setParseAction(lambda t: o.OutputSpec(t))

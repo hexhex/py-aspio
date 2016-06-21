@@ -52,7 +52,7 @@ class TestParser(unittest.TestCase):
                 OUTPUT {
                     i = 25,
                     s = "hello",
-                    t = s
+                    t = &s
                 }
             ''',
             r'''
