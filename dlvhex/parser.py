@@ -59,30 +59,26 @@ def ignore_comments(parser):
 
 # Common syntax elements
 with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-    alphas_lowercase = srange("[a-z]")
-    alphas_uppercase = srange("[A-Z]")
+    alphas_lowercase = srange('[a-z]')
+    alphas_uppercase = srange('[A-Z]')
     predicate_name = Word(alphas_lowercase, alphanums + '_').setName('predicate name')
     # Currently we only support ASCII identifiers for the python side.
     # Python (starting with version 3.0) supports additional characters in identifiers, see https://docs.python.org/3/reference/lexical_analysis.html#identifiers
     # It would be nice to support the same set, but it's not absolutely necessary.
     py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
     py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
-    var = Word(alphas, alphanums).setName('variable')
-    integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))  # TODO: maybe we should rename this to "posinteger" or something like this
+    integer = (Optional('-') + Word(nums)).setName('integer').setParseAction(lambda t: int(t[0]))
     INPUT = CaselessKeyword('INPUT').suppress()
     FOR = CaselessKeyword('for').suppress()
     IN = CaselessKeyword('in').suppress()
     OUTPUT = CaselessKeyword('OUTPUT').suppress()
     PREDICATE = CaselessKeyword('predicate').suppress()
-    CONTAINER = CaselessKeyword('container').suppress()
     SET = CaselessKeyword('set').suppress()
     SEQUENCE = CaselessKeyword('sequence').suppress()
-    MAPPING = CaselessKeyword('mapping').suppress()
+    MAPPING = CaselessKeyword('mapping').suppress()  # TODO: Change to 'dictionary'
     INDEX = CaselessKeyword('index').suppress()
     KEY = CaselessKeyword('key').suppress()
     CONTENT = CaselessKeyword('content').suppress()
-    CLASS = CaselessKeyword('class').suppress()
-    ARGUMENTS = CaselessKeyword('arguments').suppress()
     lpar = Literal('(').suppress()
     rpar = Literal(')').suppress()
     lbracket = Literal('[').suppress()
@@ -100,13 +96,19 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
 def RawInputSpecParser():
     '''Syntax of the INPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        # Keywords cannot be used as variable names (we still allow "INPUT" as it never occurs inside the spec)
+        input_keyword = SET | SEQUENCE | MAPPING | FOR | IN
+        var = (~input_keyword + Word(alphas + '_', alphanums + '_')).setName('variable')
+        #
+        var.setParseAction(lambda t: t[0])
+
         # Accessing objects, some examples:
         # - just access a variable directly:            node
         # - access a field on a variable:               node.label
         # - accessing a fixed index in a collection:    some_tuple[3]
         # - chainable:                                  node.neighbors[2].label
         field_accessor = dot + py_identifier
-        index_accessor = lbracket + integer + rbracket
+        index_accessor = lbracket + integer + rbracket  # TODO: Allow quoted string literals as keys
         accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
         #
         accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
@@ -117,7 +119,7 @@ def RawInputSpecParser():
         # - iterate over keys and elements of a dictionary: for (k, v) in mapping some_dict
         iteration_element = var('elem')
         iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
-        set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')     # TODO: Ambiguity? Is "set" the SET keyword or a variable named "set"? (should be unambiguous since we can look at the following token? variable could be named "for" too). We could just forbid variable names that are keywords.
+        set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')
         sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
         mapping_iteration = FOR + iteration_assoc_and_element + IN + MAPPING + accessor('accessor')
         iteration = sequence_iteration | mapping_iteration | set_iteration
@@ -126,7 +128,6 @@ def RawInputSpecParser():
         set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
         sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
         mapping_iteration.setParseAction(lambda t: i.InputMappingIteration(t.assoc, t.elem, t.accessor))
-        # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
 
         predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
         predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
@@ -220,7 +221,7 @@ def RawSpecParser():
         i = RawInputSpecParser().setResultsName('input')
         o = RawOutputSpecParser().setResultsName('output')
         p = Optional(i) & Optional(o)
-        # collect input and output
+        # Note: t.get(n) returns None if n doesn't exist while t.n would return an empty string
         p.setParseAction(lambda t: (t.get('input'), t.get('output')))  # TODO
         return p
 
@@ -301,7 +302,7 @@ def AnswerSetParser():
     '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
         quoted_string = QuotedString(quoteChar='"', escChar='\\')
-        constant_symbol = Word(alphas, alphanums + '_')  # TODO: Check what dlvhex2 allows here (probably need at add underscores at least?)
+        constant_symbol = Word(alphas_lowercase, alphanums + '_')
         arg = integer | quoted_string | constant_symbol
         fact = predicate_name('pred') + Group(Optional(lpar + arg + ZeroOrMore(comma + arg) + rpar))('args')
         answer_set = lbrace + Optional(fact + ZeroOrMore(comma + fact)) + rbrace  # + LineEnd()
