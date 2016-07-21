@@ -22,7 +22,7 @@ class FactAccumulator(metaclass=ABCMeta):
 class StreamAccumulator(FactAccumulator):
     def __init__(self, output_stream: TextIO) -> None:
         if not output_stream.writable:
-            raise ValueError("output_stream must be writable")
+            raise ValueError('output_stream must be writable')
         self._stream = output_stream
 
     def quote(self, arg: Any) -> str:
@@ -30,7 +30,7 @@ class StreamAccumulator(FactAccumulator):
         return '"' + str(arg).replace('\\', '\\\\').replace('\"', '\\\"') + '"'
 
     def arg_str(self, arg: Any) -> str:
-        """Convert the given argument to a string suitable to be passed to dlvhex."""
+        '''Convert the given argument to a string suitable to be passed to dlvhex.'''
         if isinstance(arg, numbers.Integral):
             # Output integers without quotes (so we can use them for arithmetic in dlvhex)
             return str(arg)
@@ -40,7 +40,7 @@ class StreamAccumulator(FactAccumulator):
             return self.quote(arg)
 
     def add_fact(self, predicate: str, args: Sequence[Any]) -> None:
-        """Writes a fact to the output stream, in the usual ASP syntax: predicate(arg1, arg2, arg3)."""
+        '''Writes a fact to the output stream, in the usual ASP syntax: predicate(arg1, arg2, arg3).'''
         # assert isinstance(predicate, str)
         assert len(predicate) > 0
         self._stream.write(predicate)
@@ -51,23 +51,26 @@ class StreamAccumulator(FactAccumulator):
             self._stream.write(self.arg_str(arg))
         self._stream.write(').\n')
         if dlvhex.debug:
-            print(predicate, args)  # TODO: more sophisticated approach... "tee" output stream to stderr in constructor? see also http://stackoverflow.com/a/4985080/1889401
+            print(predicate, args, '\t=> ' + predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')')  # TODO: more sophisticated approach... "tee" output stream to stderr in constructor? see also http://stackoverflow.com/a/4985080/1889401
 
 
 class InputAccessor:
     def __init__(self, variable: Variable, attribute_path: Sequence[Union[int, str]]) -> None:
         self._variable = variable
         self._attribute_path = tuple(attribute_path)
+        # TODO:
+        # We should also allow string subscripts (would allow easy access to dicts with fixed keys, e.g. JSON data)
+        # => don't store raw int and str objects in the attribute_path, wrap them in Attribute(name) and Subscript(index_or_key) classes.
 
     def __repr__(self) -> str:
         return self._variable + ''.join('.' + repr(attr) for attr in self._attribute_path)
 
     def check_variable_bindings(self, bound_variables: AbstractSet[Variable]) -> None:
         if self._variable not in bound_variables:
-            raise UndefinedNameError("Undefined variable {0} is being accessed".format(self._variable))
+            raise UndefinedNameError('Undefined variable {0} is being accessed'.format(self._variable))
 
     def perform_access(self, variable_assignment: VariableAssignment) -> Any:
-        """Performs the represented object access relative to the given variable assignment."""
+        '''Performs the represented object access relative to the given variable assignment.'''
         result = variable_assignment[self._variable]
         for attr in self._attribute_path:
             if isinstance(attr, int):
@@ -93,9 +96,9 @@ class InputIteration(metaclass=ABCMeta):
         pass
 
     def _check_var_and_update(self, var: Variable, bound_variables: MutableSet[Variable]) -> None:
-        """Helper function for subclasses. Add variable to given variable assignment, raising a ValueError if it is already contained."""
+        '''Helper function for subclasses. Add variable to given variable assignment, raising a ValueError if it is already contained.'''
         if var in bound_variables:
-            raise RedefinedNameError("Variable {0} is defined twice".format(var))
+            raise RedefinedNameError('Variable {0} is defined twice'.format(var))
         bound_variables.add(var)
 
 
@@ -143,14 +146,14 @@ class InputSequenceIteration(InputIteration):
         variable_assignment[self.element_variable] = value[1]
 
 
-class InputMappingIteration(InputIteration):
+class InputDictionaryIteration(InputIteration):
     def __init__(self, key_variable: Variable, element_variable: Variable, accessor: InputAccessor) -> None:
         self.key_variable = key_variable
         self.element_variable = element_variable
         self.accessor = accessor
 
     def __repr__(self) -> str:
-        return 'FOR ({0}, {1}) IN MAPPING {2}'.format(repr(self.key_variable), repr(self.element_variable), repr(self.accessor))
+        return 'FOR ({0}, {1}) IN DICTIONARY {2}'.format(repr(self.key_variable), repr(self.element_variable), repr(self.accessor))
 
     def check_and_update_variable_bindings(self, bound_variables: MutableSet[Variable]) -> None:
         self.accessor.check_variable_bindings(bound_variables)
@@ -173,12 +176,12 @@ class InputMappingIteration(InputIteration):
 
 class InputPredicate:
     def __init__(self, predicate: str, arguments: Sequence[InputAccessor], iterations: Sequence[InputIteration]) -> None:
-        """Represents a single input mapping that produces facts of a single predicate.
+        '''Represents a single input mapping that produces facts of a single predicate.
 
         @param predicate: The name of the predicate to generate. Must be a non-empty string.
         @param arguments: A list of InputAccessor instances that describe the arguments of the generated facts.
         @param iterations: A list of InputIteration instances that describe how to generate the set of facts from the input arguments.
-        """
+        '''
         self._predicate = predicate
         self._arguments = tuple(arguments)
         self._iterations = tuple(iterations)
@@ -224,16 +227,16 @@ class InputPredicate:
 
 class InputSpec:
     def __init__(self, arguments: Sequence[Variable], predicates: Iterable[InputPredicate]) -> None:
-        """Represents an INPUT statement, i.e. the complete input mapping description for an ASP program.
+        '''Represents an INPUT statement, i.e. the complete input mapping description for an ASP program.
 
         @param arguments: The input arguments that need to be given when solving the program.
         @param predicates: A list of InputPredicate instances describing how to generate facts from the input arguments.
-        """
+        '''
         self._arguments = tuple(arguments)
         self._predicates = tuple(predicates)
         # Check for name errors in input arguments (i.e. there must not be duplicate names)
         if len(self._arguments) != len(set(self._arguments)):
-            raise RedefinedNameError("Input arguments must have unique names")
+            raise RedefinedNameError('Input arguments must have unique names')
         # Check for name errors in accessor and iteration definitions (two kinds of errors: either using an undefined variable name, or redefining a variable name)
         for pred in self._predicates:
             pred.check_variable_bindings(self._arguments)
@@ -247,11 +250,11 @@ class InputSpec:
         return parser.parse_input_spec(string)
 
     def perform_mapping(self, input_args: Sequence[Any], accumulator: FactAccumulator) -> None:
-        """Perform the input mapping.
+        '''Perform the input mapping.
 
-        Transforms the input_args to an ASP representation according to the InputMapping,
+        Transforms the input_args to an ASP representation according to the InputSpec,
         and passes the results to the given accumulator (see FactAccumulator class).
-        """
+        '''
         if len(input_args) != len(self._arguments):
             raise ValueError("Wrong number of arguments: expecting %d, got %d" % (len(self._arguments), len(input_args)))
         for pred in self._predicates:

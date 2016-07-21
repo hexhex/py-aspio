@@ -34,10 +34,11 @@ class TestSolver(unittest.TestCase):
                     p(abc6, 1).
                     p(abcd, 0).
                     p(xyz, 2).
+                    % Generates a large number of answer sets
                     q(X) v r(X) v s(X) v t(X) v u(X) :- p(X, _).
 
                     %! OUTPUT {
-                    %!  d = mapping { predicate: p(K, V); content: V; key: K; }
+                    %!  d = dictionary { predicate: p(K, V); content: V; key: K; }
                     %! }
                 ''')
                 r = prog.solve()

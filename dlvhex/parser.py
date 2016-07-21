@@ -1,6 +1,6 @@
 import re
 from contextlib import contextmanager
-from pyparsing import (
+from pyparsing import (  # type: ignore
     alphas,
     alphanums,
     nums,
@@ -19,7 +19,7 @@ from pyparsing import (
     QuotedString,
     Word,
     ZeroOrMore,
-)  # type: ignore
+)
 from typing import Iterable, List, Mapping, MutableMapping, Tuple, Union  # noqa
 from . import input as i
 from . import output as o
@@ -75,7 +75,7 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     PREDICATE = CaselessKeyword('predicate').suppress()
     SET = CaselessKeyword('set').suppress()
     SEQUENCE = CaselessKeyword('sequence').suppress()
-    MAPPING = CaselessKeyword('mapping').suppress()  # TODO: Change to 'dictionary'
+    DICTIONARY = CaselessKeyword('dictionary').suppress()
     INDEX = CaselessKeyword('index').suppress()
     KEY = CaselessKeyword('key').suppress()
     CONTENT = CaselessKeyword('content').suppress()
@@ -97,7 +97,7 @@ def RawInputSpecParser():
     '''Syntax of the INPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
         # Keywords cannot be used as variable names (we still allow "INPUT" as it never occurs inside the spec)
-        input_keyword = SET | SEQUENCE | MAPPING | FOR | IN
+        input_keyword = SET | SEQUENCE | DICTIONARY | FOR | IN
         var = (~input_keyword + Word(alphas + '_', alphanums + '_')).setName('variable')
         #
         var.setParseAction(lambda t: t[0])
@@ -116,18 +116,18 @@ def RawInputSpecParser():
         # Iterating over objects, some examples:
         # - iterate over elements:                          for node in [set] nodes
         # - iterate over indices and elements of a list:    for (i, m) in sequence node.neighbors
-        # - iterate over keys and elements of a dictionary: for (k, v) in mapping some_dict
+        # - iterate over keys and elements of a dictionary: for (k, v) in dictionary some_dict
         iteration_element = var('elem')
         iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
         set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')
         sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
-        mapping_iteration = FOR + iteration_assoc_and_element + IN + MAPPING + accessor('accessor')
-        iteration = sequence_iteration | mapping_iteration | set_iteration
+        dictionary_iteration = FOR + iteration_assoc_and_element + IN + DICTIONARY + accessor('accessor')
+        iteration = sequence_iteration | dictionary_iteration | set_iteration
         iterations = Group(ZeroOrMore(iteration))
         #
         set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
         sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
-        mapping_iteration.setParseAction(lambda t: i.InputMappingIteration(t.assoc, t.elem, t.accessor))
+        dictionary_iteration.setParseAction(lambda t: i.InputDictionaryIteration(t.assoc, t.elem, t.accessor))
 
         predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
         predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
@@ -185,13 +185,13 @@ def RawOutputSpecParser():
         set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
         # TODO: add clause like "at_missing_index: skip;", "at_missing_index: 0;", "at_missing_index: None;"
         sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
-        mapping_spec = MAPPING + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
-        expr_collection = set_spec | simple_set_spec | sequence_spec | mapping_spec
+        dictionary_spec = DICTIONARY + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
+        expr_collection = set_spec | simple_set_spec | sequence_spec | dictionary_spec
         #
         simple_set_spec.setParseAction(lambda t: o.ExprSimpleSet(t.predicate))
         set_spec.setParseAction(lambda t: o.ExprSet(t.query, t.content))
         sequence_spec.setParseAction(lambda t: o.ExprSequence(t.query, t.content, t.index))
-        mapping_spec.setParseAction(lambda t: o.ExprMapping(t.query, t.content, t.key))
+        dictionary_spec.setParseAction(lambda t: o.ExprDictionary(t.query, t.content, t.key))
 
         expr_obj_args = Group(Optional(expr + ZeroOrMore(comma + expr) + Optional(comma)))
         expr_obj = Optional(py_qualified_identifier, default=None)('constructor') + lpar + expr_obj_args('args') + rpar
@@ -233,7 +233,7 @@ def SpecParser():
 
 
 class EmbeddedSpecParser:
-    """Syntax of the whole I/O mapping specification, embedded in ASP comments starting with '%!'."""
+    '''Syntax of the whole I/O mapping specification, embedded in ASP comments starting with '%!'.'''
     # I tried doing this part with pyparsing too, so the whole parsing can be performed in a single pass without an intermediate string representation.
     # However, I was not able to make it work yet, so I am using a simple regex-based implementation at the moment.
     # Most likely problem with the pyparsing attempt: automatic handling of whitespace combined with LineStart() and LineEnd()

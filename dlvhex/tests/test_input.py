@@ -30,7 +30,7 @@ class TestInput(unittest.TestCase):
                 r(xs[2][1]);
                 empty();
                 seq(i, x[0]) for (i, x) in sequence xs;
-                dict(value, key) for (key, value) in mapping ys;
+                dict(value, key) for (key, value) in dictionary ys;
                 % str(ys["abc"]);
             } % comment at the end''')
         # TODO: Allow access to string keys too! dict['abc']

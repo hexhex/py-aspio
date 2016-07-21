@@ -74,19 +74,19 @@ class TestOutput(unittest.TestCase):
                 %! }
             ''').solve_one().xs
 
-    def test_mapping(self):
+    def test_dictionary(self):
         d = Program(code=r'''
             p(abc, 1).
             p(def, 0).
             p(xyz, 2).
 
             %! OUTPUT {
-            %!  d = mapping { predicate: p(K, V); content: V; key: K; }
+            %!  d = dictionary { predicate: p(K, V); content: V; key: K; }
             %! }
         ''').solve_one().d
         assert d == {'def': 0, 'abc': 1, 'xyz': 2}
 
-    def test_mapping_with_duplicate_keys(self):
+    def test_dictionary_with_duplicate_keys(self):
         with self.assertRaises(DuplicateKeyError):
             Program(code=r'''
                 p(abc, 1).
@@ -94,7 +94,7 @@ class TestOutput(unittest.TestCase):
                 p(xyz, 2).
 
                 %! OUTPUT {
-                %!  d = mapping { predicate: p(K, V); content: V; key: K; }
+                %!  d = dictionary { predicate: p(K, V); content: V; key: K; }
                 %! }
             ''').solve_one().d
 

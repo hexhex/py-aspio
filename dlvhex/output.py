@@ -32,7 +32,7 @@ class OutputResult:
     def get_object(self, name: str) -> Any:
         if name not in self.objs:
             if name not in self.toplevel:
-                raise UndefinedNameError('No top-level mapping with name "{0}".'.format(name))
+                raise UndefinedNameError('No top-level name "{0}".'.format(name))
             self.objs[name] = OutputResult.__object_is_being_mapped
             self.objs[name] = self.toplevel[name].perform_mapping(self, LocalContext())
             # We don't need to keep the raw data around after everything has been mapped
@@ -217,7 +217,7 @@ class ExprSequence(ExprCollection):
         return [x[1] for x in xs]
 
 
-class ExprMapping(ExprCollection):
+class ExprDictionary(ExprCollection):
     def __init__(self, query: str, content: Expr, key: Expr) -> None:
         super().__init__(query, [content, key])
         self.content = content
