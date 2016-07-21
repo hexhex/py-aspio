@@ -59,4 +59,5 @@ class TestSolver(unittest.TestCase):
                 for ref in refs:
                     self.assertIsNone(ref())
                 # Make sure we didn't get any ResourceWarnings
-                self.assertFalse(w and str(w[-1]))
+                if w and str(w[-1]):
+                    self.fail('ResourceWarning was issued during test')

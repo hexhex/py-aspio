@@ -1,6 +1,5 @@
 import unittest
-from ..parser import parse_output_spec, parse_embedded_spec, EmbeddedSpecParser, ParseException
-from ..input import InputSpec
+from ..parser import parse_input_spec, parse_output_spec, parse_embedded_spec, EmbeddedSpecParser, ParseException
 
 
 class TestParser(unittest.TestCase):
@@ -26,21 +25,28 @@ class TestParser(unittest.TestCase):
         ]
         for valid_input_spec in valid_input_specs:
             try:
-                spec = InputSpec.parse(valid_input_spec)
-                self.assertTrue(isinstance(spec, InputSpec))
+                parse_input_spec(valid_input_spec)
             except ParseException as e:
                 self.fail("Error while parsing " + repr(valid_input_spec) + ": " + str(e))
 
     def test_invalid_input_spec(self):
         invalid_input_specs = [
-            'INPUT { }',  # no argument list
-            'INPUT ( )',  # no body
-            'INPUT (x,y,z) { p(x, y) q(z) }',  # no semicolon after predicates
+            r'INPUT { }',  # no argument list
+            r'INPUT ( )',  # no body
+            r'INPUT (x,y,z) { p(x, y) q(z) }',  # no semicolon after predicates
+            r'INPUT (set) { p(x) for x in set; }',  # keywords are not allowed as variable names
+            r'INPUT (for) { p(x) for x in set for; }',
+            r'INPUT (s) { p(x) for x in set for y in set; }',  # should raise a ParseException and not an UndefinedNameError
         ]
         # TODO: Tests for invalid variable bindings (with assertRaises(UndefinedNameError) etc.)
         for invalid_input_spec in invalid_input_specs:
-            with self.assertRaises(ParseException):
-                InputSpec.parse(invalid_input_spec)
+            try:
+                parse_input_spec(invalid_input_spec)
+                self.fail("Expected ParseException while parsing {0}, but did not raise any exception.".format(repr(invalid_input_spec)))
+            except ParseException:
+                pass  # Success (we expect ParseExceptions for these test cases)
+            except Exception as e:
+                self.fail("Expected ParseException while parsing {0}, but got {1}: {2}".format(repr(invalid_input_spec), type(e), e))
 
     def test_valid_output_spec(self):
         valid_output_specs = [
@@ -136,9 +142,8 @@ class TestParser(unittest.TestCase):
             q(X):-p(X).
             p("quoted"). % q("quoted but in comment").  %! means: this should be IGNORED.
         ''')
-        self.assertEqual(result, '\n'.join(
-            [
-                ' this is what we want to parse',
-                ' behind predicate ',
-                ' behind a quoted string containing percent',
-            ]))
+        self.assertEqual(result, '\n'.join([
+            ' this is what we want to parse',
+            ' behind predicate ',
+            ' behind a quoted string containing percent',
+        ]))
