@@ -119,10 +119,9 @@ class DlvhexLineReader(ClosableIterable[str]):
     a SolverSubprocessError will be thrown during iteration, containing the return code and stderr output of the process.
     '''
 
-    def __init__(self, *, process: Popen, encoding: str, tmp_input) -> None:
+    def __init__(self, *, process: Popen, encoding: str, tmp_input: FilesystemIPC) -> None:
         self.process = process
         self.stdout_encoding = encoding
-        # self.closed = False
         self.iterating = False
         #
         # We need to capture stderr in a background thread to avoid deadlocks.
@@ -133,9 +132,9 @@ class DlvhexLineReader(ClosableIterable[str]):
         # Set up finalization. Using weakref.finalize seems to work more robustly than using __del__.
         # (One problem that occurred with __del__: It seemed like python was calling __del__ for self.process and its IO streams first,
         # which resulted in ResourceWarnings even though we were closing the streams properly in our __del__ function.)
-        self.__close = DlvhexLineReader.__CloseHelper(process, self.stderr_capture_thread, encoding, tmp_input)
-        f = weakref.finalize(self, self.__close)  # type: ignore
-        f.atexit = True  # make sure the subprocess will be terminated if it's still running when the python process exits
+        self._finalize = weakref.finalize(self, DlvhexLineReader.__close, process, self.stderr_capture_thread, encoding, tmp_input)  # type: ignore
+        # Make sure the subprocess will be terminated if it's still running when the python process exits
+        self._finalize.atexit = True
 
     def __iter__(self) -> Iterator[str]:
         '''Return an iterator over the lines written to stdout. May only be called once! Might raise a SolverSubprocessError.'''
@@ -163,52 +162,41 @@ class DlvhexLineReader(ClosableIterable[str]):
         self.close()
 
     def close(self) -> None:
+        self._finalize()
+
+    # We cannot have a reference to `self` to avoid reference cycles (see weakref.finalize documentation).
+    @staticmethod
+    def __close(process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input: FilesystemIPC) -> None:
         '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
-        self.__close()
-
-    # We need to do destruction in a separate class to avoid reference cycles.
-    class __CloseHelper:
-        def __init__(self, process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input) -> None:
-            self.process = process
-            self.stderr_capture_thread = stderr_capture_thread
-            self.stderr_encoding = stderr_encoding
-            self.tmp_input = tmp_input
-
-        def is_running(self) -> bool:
-            '''True iff the process is still running.'''
-            return self.process.poll() is None
-
-        def __call__(self) -> None:
-            '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
-            if self.is_running():
-                # Still running? Kill the subprocess
-                self.process.terminate()
-                try:
-                    self.process.wait(timeout=0.001)
-                except TimeoutExpired:
-                    # Kill unconditionally after a short timeout.
-                    # A potential problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
-                    self.process.kill()
-                    self.process.wait()
-                assert not self.is_running()
-                # Various outcomes were observed that do not signify a real error condition as far as py-dlvhex is concerned:
-                # * dlvhex2 simply terminates by itself between the is_running() check and the terminate() call
-                # * dlvhex2 executes its SIGTERM handler and exits with code 2, and a message on stderr ("dlvhex2 [...] got termination signal 15")
-                # * dlvhex2 doesn't have its SIGTERM handler active and the default handler exits with code -15
-                # * dlvhex2 hangs after receiving SIGTERM (maybe when it's blocking on stdout? we're not reading from it anymore at this point), so we send SIGKILL after the timeout and it exits with -9
-                # * dlvhex2 receives SIGTERM and crashes with "Assertion failed: (!res), function ~mutex, file /usr/local/include/boost/thread/pthread/mutex.hpp, line 111", and exit code -6 (SIGABRT)
-                if self.process.returncode in (2, -signal.SIGTERM, -signal.SIGKILL, -signal.SIGABRT):
-                    # In the cases mentioned above (and only if we are responsible for termination, i.e. after calling terminate() from this function), don't throw an exception
-                    self.process.returncode = 0
-            # Note: only close stdin after the process has been terminated, otherwise dlvhex will start outputting everything at once
-            self.process.stdin.close()
-            self.process.stdout.close()
-            self.stderr_capture_thread.join()  # ensure cleanup of stderr
-            self.tmp_input.cleanup()  # remove the temporary input pipe/file
-            if self.process.returncode != 0:
-                err = SolverSubprocessError(self.process.returncode, str(self.stderr_capture_thread.data, encoding=self.stderr_encoding))
-                self.process.returncode = 0  # make sure we only raise an error once
-                raise err
+        if process.poll() is None:
+            # Still running? Kill the subprocess
+            process.terminate()
+            try:
+                process.wait(timeout=0.001)
+            except TimeoutExpired:
+                # Kill unconditionally after a short timeout.
+                # A potential problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
+                process.kill()
+                process.wait()
+            assert process.poll() is not None  # subprocess has stopped
+            # Various outcomes were observed that do not signify a real error condition as far as py-dlvhex is concerned:
+            # * dlvhex2 simply terminates by itself between the is_running() check and the terminate() call
+            # * dlvhex2 executes its SIGTERM handler and exits with code 2, and a message on stderr ("dlvhex2 [...] got termination signal 15")
+            # * dlvhex2 doesn't have its SIGTERM handler active and the default handler exits with code -15
+            # * dlvhex2 hangs after receiving SIGTERM (maybe when it's blocking on stdout? we're not reading from it anymore at this point), so we send SIGKILL after the timeout and it exits with -9
+            # * dlvhex2 receives SIGTERM and crashes with "Assertion failed: (!res), function ~mutex, file /usr/local/include/boost/thread/pthread/mutex.hpp, line 111", and exit code -6 (SIGABRT)
+            if process.returncode in (2, -signal.SIGTERM, -signal.SIGKILL, -signal.SIGABRT):
+                # In the cases mentioned above (and only if we are responsible for termination, i.e. after calling terminate() from this function), don't throw an exception
+                process.returncode = 0
+        # Note: only close stdin after the process has been terminated, otherwise dlvhex will start outputting everything at once
+        process.stdin.close()
+        process.stdout.close()
+        stderr_capture_thread.join()  # ensure cleanup of stderr
+        tmp_input.cleanup()  # remove the temporary input pipe/file
+        if process.returncode != 0:
+            err = SolverSubprocessError(process.returncode, str(stderr_capture_thread.data, encoding=stderr_encoding))
+            process.returncode = 0  # make sure we only raise an error once
+            raise err
 
 
 # These should actually be import from the .output module, but mypy currently does not support importing type aliases.
