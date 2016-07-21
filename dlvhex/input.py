@@ -26,8 +26,8 @@ class StreamAccumulator(FactAccumulator):
         self._stream = output_stream
 
     def quote(self, arg: Any) -> str:
-        """Enclose the given argument in double quotes, escaping any contained quotes with a backslash."""
-        return '"' + str(arg).replace(r'"', r'\"') + '"'
+        '''Enclose the given argument in double quotes, escaping any contained quotes and backslashes with a backslash.'''
+        return '"' + str(arg).replace('\\', '\\\\').replace('\"', '\\\"') + '"'
 
     def arg_str(self, arg: Any) -> str:
         """Convert the given argument to a string suitable to be passed to dlvhex."""

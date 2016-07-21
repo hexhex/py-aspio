@@ -2,7 +2,7 @@ import unittest
 from ..program import Program
 
 
-class TestOutput(unittest.TestCase):
+class TestProgram(unittest.TestCase):
 
     def test__input_args__expect_none(self):
         prog0 = Program(code=r'p.')
@@ -21,3 +21,24 @@ class TestOutput(unittest.TestCase):
     def test__solve_one__without_answerset(self):
         result = Program(code=r'x. :- x.').solve_one()
         self.assertIsNone(result)
+
+    def test_string_escaping(self):
+        p = Program(code=r'''
+            %! INPUT (str) { p(str); }
+            %! OUTPUT { strs = set { predicate: p(X); content: X; } }
+        ''')
+        strings = [
+            'abc',
+            'a"bc',
+            'a\\bc',
+            'a\\"bc',
+            'abc"',
+            '"abc"',
+            'a\\\\"b"c',
+            '\\abc',
+            'abc\\',
+        ]
+        for string in strings:
+            result = p.solve_one(string).strs
+            self.assertIn(string, result)
+            self.assertEqual(len(result), 1)
