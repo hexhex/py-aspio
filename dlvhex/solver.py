@@ -2,9 +2,9 @@ import io
 import signal
 import weakref
 from subprocess import Popen, PIPE, TimeoutExpired  # type: ignore
-from typing import Any, Generic, Iterable, Iterator, Mapping, Sequence, Tuple, TypeVar, Union
+from typing import Any, Generic, IO, Iterable, Iterator, Mapping, Sequence, Tuple, TypeVar, Union
 from .errors import UndefinedNameError, SolverError, SolverSubprocessError
-from .helper import CachingIterable, StreamCaptureThread, TemporaryNamedPipe
+from .helper import CachingIterable, FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
 from .input import InputSpec, StreamAccumulator
 from .output import OutputSpec
 from .parser import parse_answer_set, ParseException  # type: ignore
@@ -31,29 +31,43 @@ class Solver:
         self.executable = executable if executable is not None else 'dlvhex2'
         self.encoding = Solver.default_encoding
 
-    def run(self, program: 'p.Program', input_args: Sequence[Any], cache: bool) -> 'Results':
-        '''Run the dlvhex solver on the given program.'''
-        # No input/output spec given? This is equivalent to using an empty spec.
-        input_spec = program.input_spec
-        if input_spec is None:
-            input_spec = InputSpec.empty()
-        output_spec = program.output_spec
-        if output_spec is None:
-            output_spec = OutputSpec.empty()
+    def _write_input(self, program: 'p.Program', input_args: Sequence[Any], text_stream: IO[str]):
+        '''Write all facts and rules that are needed in addition to the original ASP code to the given stream.'''
+        # Map input data and pass it over stdin
+        # Raises exception if the input arguments are not as expected (e.g., wrong count, an attribute does not exist, ...)
+        program.input_spec.perform_mapping(input_args, StreamAccumulator(text_stream))
+        # Additional rules required for output mapping
+        text_stream.write('\n'.join(str(rule) for rule in program.output_spec.additional_rules()))
+        # Pass code given as string over stdin
+        for code in program.code_parts:
+            text_stream.write(code)
 
-        with TemporaryNamedPipe() as tmp_input_name:
+    def run(self, program: 'p.Program', input_args: Sequence[Any], *, cache: bool) -> 'Results':
+        '''Run the dlvhex solver on the given program.'''
+        # Prefer named pipes, but fall back to a file if pipes are not implemented for the current platform
+        try:
+            tmp_input = TemporaryNamedPipe()  # type: FilesystemIPC
+        except NotImplementedError:
+            tmp_input = TemporaryFile()
+
+        try:
             args = [
                 self.executable,
                 # only print the answer sets themselves
                 '--silent',
                 # only capture relevant predicates
-                '--filter=' + ','.join(output_spec.captured_predicates()),
+                '--filter=' + ','.join(program.output_spec.captured_predicates()),
                 # wait for a newline on stdin between answer sets
                 '--waitonmodel',
                 # tell dlvhex2 to read our input from the named pipe
-                tmp_input_name,
+                tmp_input.name,
             ]
             args.extend(program.file_parts)
+
+            # If we have a file, we must pass the data before starting the subprocess
+            if isinstance(tmp_input, TemporaryFile):
+                with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stdin:
+                    self._write_input(program, input_args, text_stdin)
             # Start dlvhex2 subprocess.
             # It needs to be running before we pass any input on the named pipe, or we risk a deadlock by filling the pipe's buffer.
             process = Popen(
@@ -62,22 +76,30 @@ class Solver:
                 stdout=PIPE,
                 stderr=PIPE,
             )
-            # with io.TextIOWrapper(process.stdin, encoding=self.encoding) as text_stdin:
-            with open(tmp_input_name, 'wt', encoding=self.encoding) as text_stdin:
-                # Map input data and pass it over stdin
-                input_spec.perform_mapping(input_args, StreamAccumulator(text_stdin))
-                # Additional rules required for output mapping
-                text_stdin.write('\n'.join(str(rule) for rule in output_spec.additional_rules()))
-                # Pass code given as string over stdin
-                for code in program.code_parts:
-                    text_stdin.write(code)
-            # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
-            return Results(
-                answer_sets=AnswerSetParserIterable(DlvhexLineReader(process, self.encoding)),
-                output_spec=output_spec,
-                registry=program.local_registry,
-                cache=cache
-            )
+            try:
+                # If we have a named pipe, we must pass the data after starting the subprocess
+                if isinstance(tmp_input, TemporaryNamedPipe):
+                    with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stdin:
+                        self._write_input(program, input_args, text_stdin)
+
+                # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
+                reader = DlvhexLineReader(process=process, encoding=self.encoding, tmp_input=tmp_input)
+                return Results(
+                    answer_sets=AnswerSetParserIterable(reader),
+                    output_spec=program.output_spec,
+                    registry=program.local_registry,
+                    cache=cache,
+                )
+            except:
+                process.kill()
+                # Close streams to prevent ResourceWarnings
+                process.stdin.close()
+                process.stdout.close()
+                process.stderr.close()
+                raise
+        except:
+            tmp_input.cleanup()
+            raise
 
 
 T = TypeVar('T', covariant=True)
@@ -97,7 +119,7 @@ class DlvhexLineReader(ClosableIterable[str]):
     a SolverSubprocessError will be thrown during iteration, containing the return code and stderr output of the process.
     '''
 
-    def __init__(self, process: Popen, encoding: str) -> None:
+    def __init__(self, *, process: Popen, encoding: str, tmp_input) -> None:
         self.process = process
         self.stdout_encoding = encoding
         # self.closed = False
@@ -111,7 +133,7 @@ class DlvhexLineReader(ClosableIterable[str]):
         # Set up finalization. Using weakref.finalize seems to work more robustly than using __del__.
         # (One problem that occurred with __del__: It seemed like python was calling __del__ for self.process and its IO streams first,
         # which resulted in ResourceWarnings even though we were closing the streams properly in our __del__ function.)
-        self.__close = DlvhexLineReader.__CloseHelper(process, self.stderr_capture_thread, encoding)
+        self.__close = DlvhexLineReader.__CloseHelper(process, self.stderr_capture_thread, encoding, tmp_input)
         f = weakref.finalize(self, self.__close)  # type: ignore
         f.atexit = True  # make sure the subprocess will be terminated if it's still running when the python process exits
 
@@ -141,22 +163,23 @@ class DlvhexLineReader(ClosableIterable[str]):
         self.close()
 
     def close(self) -> None:
-        '''Shuts down the process if it is still running. Raises a SolverSubprocessError if the process exited with an error.'''
+        '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
         self.__close()
 
     # We need to do destruction in a separate class to avoid reference cycles.
     class __CloseHelper:
-        def __init__(self, process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str) -> None:
+        def __init__(self, process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input) -> None:
             self.process = process
             self.stderr_capture_thread = stderr_capture_thread
             self.stderr_encoding = stderr_encoding
+            self.tmp_input = tmp_input
 
         def is_running(self) -> bool:
             '''True iff the process is still running.'''
             return self.process.poll() is None
 
         def __call__(self) -> None:
-            '''Shuts down the process if it is still running. Raises a SolverSubprocessError if the process exited with an error.'''
+            '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
             if self.is_running():
                 # Still running? Kill the subprocess
                 self.process.terminate()
@@ -175,12 +198,13 @@ class DlvhexLineReader(ClosableIterable[str]):
                 # * dlvhex2 hangs after receiving SIGTERM (maybe when it's blocking on stdout? we're not reading from it anymore at this point), so we send SIGKILL after the timeout and it exits with -9
                 # * dlvhex2 receives SIGTERM and crashes with "Assertion failed: (!res), function ~mutex, file /usr/local/include/boost/thread/pthread/mutex.hpp, line 111", and exit code -6 (SIGABRT)
                 if self.process.returncode in (2, -signal.SIGTERM, -signal.SIGKILL, -signal.SIGABRT):
-                    # In the cases mentioned above (and only if we called terminate()), don't throw an exception
+                    # In the cases mentioned above (and only if we are responsible for termination, i.e. after calling terminate() from this function), don't throw an exception
                     self.process.returncode = 0
             # Note: only close stdin after the process has been terminated, otherwise dlvhex will start outputting everything at once
             self.process.stdin.close()
             self.process.stdout.close()
             self.stderr_capture_thread.join()  # ensure cleanup of stderr
+            self.tmp_input.cleanup()  # remove the temporary input pipe/file
             if self.process.returncode != 0:
                 err = SolverSubprocessError(self.process.returncode, str(self.stderr_capture_thread.data, encoding=self.stderr_encoding))
                 self.process.returncode = 0  # make sure we only raise an error once

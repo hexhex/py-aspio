@@ -1,9 +1,13 @@
 from .caching_iterable import CachingIterable
+from .filesystem_ipc import FilesystemIPC, TemporaryNamedPipe, TemporaryFile
 from .stream_capture_thread import StreamCaptureThread
-from .temppipe import TemporaryNamedPipe
 
 __all__ = [
     'CachingIterable',
-    'StreamCaptureThread',
+    #
+    'FilesystemIPC',
+    'TemporaryFile',
     'TemporaryNamedPipe',
+    #
+    'StreamCaptureThread',
 ]

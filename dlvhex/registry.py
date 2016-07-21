@@ -3,7 +3,13 @@ from copy import copy
 from types import ModuleType
 from typing import Callable, Iterable, MutableMapping, Optional, Union  # noqa
 
-__all__ = ['register', 'import_from_module']
+__all__ = [
+    'Constructor',
+    'global_registry',
+    'import_from_module',
+    'register',
+    'Registry',
+]
 
 
 Constructor = Callable[..., object]
@@ -26,6 +32,12 @@ class Registry:
         self._registered_names[name] = constructor
 
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
+        '''Import names from the given module.
+
+        All objects bound to the given names in the module are registered.
+        The state at the time of import is captured,
+        i.e. no assignments to the given names after the import_from_module call will be noticed.
+        '''
         if isinstance(module_or_module_name, ModuleType):
             module = module_or_module_name
         else:
@@ -37,16 +49,14 @@ class Registry:
         return self._registered_names.get(name)
 
 
-def LocalRegistry() -> Registry:
-    return copy(_global_registry)
+global_registry = Registry()
+
+register = global_registry.register
+import_from_module = global_registry.import_from_module
+
+# def register(name: str, constructor: Constructor, *, replace: bool = False) -> None:
+#     global_registry.register(name, constructor, replace=replace)
 
 
-_global_registry = Registry()
-
-
-def register(name: str, constructor: Constructor, *, replace: bool = False) -> None:
-    _global_registry.register(name, constructor, replace=replace)
-
-
-def import_from_module(names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-    _global_registry.import_from_module(names, module_or_module_name, package)
+# def import_from_module(names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
+#     global_registry.import_from_module(names, module_or_module_name, package)
