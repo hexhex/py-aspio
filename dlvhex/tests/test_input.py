@@ -45,6 +45,17 @@ class TestInput(unittest.TestCase):
         spec.perform_mapping([xs, ys], acc)
         self.assertEqual(acc.facts, expected_result)
 
+    def test_tuple_unpacking(self):
+        xs = [('a', 3), ('b', 4), ('c', 5)]
+        spec = InputSpec.parse(r'''
+            INPUT (xs) {
+                p(v[0], v[1]) for v in sequence xs;
+                q(i, xy) for (i, xy) in sequence xs;
+                r(i, x, y) for (i, (x, y)) in sequence xs;
+            }
+        ''')
+        # TODO
+
     def test_stream_accumulator(self):
         def sa_map(pred, args):
             s = StringIO()

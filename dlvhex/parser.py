@@ -68,17 +68,6 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
     py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
     integer = (Optional('-') + Word(nums)).setName('integer').setParseAction(lambda t: int(t[0]))
-    INPUT = CaselessKeyword('INPUT').suppress()
-    FOR = CaselessKeyword('for').suppress()
-    IN = CaselessKeyword('in').suppress()
-    OUTPUT = CaselessKeyword('OUTPUT').suppress()
-    PREDICATE = CaselessKeyword('predicate').suppress()
-    SET = CaselessKeyword('set').suppress()
-    SEQUENCE = CaselessKeyword('sequence').suppress()
-    DICTIONARY = CaselessKeyword('dictionary').suppress()
-    INDEX = CaselessKeyword('index').suppress()
-    KEY = CaselessKeyword('key').suppress()
-    CONTENT = CaselessKeyword('content').suppress()
     lpar = Literal('(').suppress()
     rpar = Literal(')').suppress()
     lbracket = Literal('[').suppress()
@@ -96,11 +85,25 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
 def RawInputSpecParser():
     '''Syntax of the INPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        INPUT = CaselessKeyword('INPUT').suppress()
+        FOR = CaselessKeyword('for').suppress()
+        IN = CaselessKeyword('in').suppress()
+        SET = CaselessKeyword('set').suppress()
+        SEQUENCE = CaselessKeyword('sequence').suppress()
+        DICTIONARY = CaselessKeyword('dictionary').suppress()
+
         # Keywords cannot be used as variable names (we still allow "INPUT" as it never occurs inside the spec)
         input_keyword = SET | SEQUENCE | DICTIONARY | FOR | IN
         var = (~input_keyword + Word(alphas + '_', alphanums + '_')).setName('variable')
         #
-        var.setParseAction(lambda t: t[0])
+        var.setParseAction(lambda t: i.Variable(str(t[0])))
+
+        # The target of an assignment, supporting tuple unpacking as a simple form of pattern matching in addition to plain variables
+        target = Forward()
+        tuple_match = lpar + target + ZeroOrMore(comma + target) + Optional(comma) + rpar
+        target << (var | tuple_match)
+        #
+        tuple_match.setParseAction(lambda t: i.TupleMatch(t))
 
         # Accessing objects, some examples:
         # - just access a variable directly:            node
@@ -111,29 +114,27 @@ def RawInputSpecParser():
         index_accessor = lbracket + integer + rbracket  # TODO: Allow quoted string literals as keys
         accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
         #
-        accessor.setParseAction(lambda t: i.InputAccessor(t.var, t.path))
+        accessor.setParseAction(lambda t: i.Accessor(t.var, t.path))
 
         # Iterating over objects, some examples:
         # - iterate over elements:                          for node in [set] nodes
         # - iterate over indices and elements of a list:    for (i, m) in sequence node.neighbors
         # - iterate over keys and elements of a dictionary: for (k, v) in dictionary some_dict
-        iteration_element = var('elem')
-        iteration_assoc_and_element = lpar + var('assoc') + comma + var('elem') + rpar
-        set_iteration = FOR + iteration_element + IN + Optional(SET) + accessor('accessor')
-        sequence_iteration = FOR + iteration_assoc_and_element + IN + SEQUENCE + accessor('accessor')
-        dictionary_iteration = FOR + iteration_assoc_and_element + IN + DICTIONARY + accessor('accessor')
-        iteration = sequence_iteration | dictionary_iteration | set_iteration
+        dictionary_type = DICTIONARY.copy().setParseAction(lambda: i.IterationType.DICTIONARY)
+        sequence_type = SEQUENCE.copy().setParseAction(lambda: i.IterationType.SEQUENCE)
+        set_type = Optional(SET).setParseAction(lambda: i.IterationType.SET)
+        # Note: SET must be last since it is optional, and the "|" operator takes the first match
+        iteration_type = dictionary_type | sequence_type | set_type
+        iteration = FOR + target('target') + IN + iteration_type('itertype') + accessor('accessor')
         iterations = Group(ZeroOrMore(iteration))
         #
-        set_iteration.setParseAction(lambda t: i.InputSetIteration(t.elem, t.accessor))
-        sequence_iteration.setParseAction(lambda t: i.InputSequenceIteration(t.assoc, t.elem, t.accessor))
-        dictionary_iteration.setParseAction(lambda t: i.InputDictionaryIteration(t.assoc, t.elem, t.accessor))
+        iteration.setParseAction(lambda t: i.Iteration(t.target, t.itertype, t.accessor))
 
         predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
         predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon
         predicate_specs = Group(ZeroOrMore(predicate_spec))
         #
-        predicate_spec.setParseAction(lambda t: i.InputPredicate(t.pred, t.args, t.iters))
+        predicate_spec.setParseAction(lambda t: i.Predicate(t.pred, t.args, t.iters))
 
         # Allow optional type hints as in python3: https://www.python.org/dev/peps/pep-0484/
         input_type = Forward()
@@ -156,6 +157,15 @@ def InputSpecParser():
 def RawOutputSpecParser():
     '''Syntax of the OUTPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        OUTPUT = CaselessKeyword('OUTPUT').suppress()
+        PREDICATE = CaselessKeyword('predicate').suppress()
+        INDEX = CaselessKeyword('index').suppress()
+        KEY = CaselessKeyword('key').suppress()
+        CONTENT = CaselessKeyword('content').suppress()
+        SET = CaselessKeyword('set').suppress()
+        SEQUENCE = CaselessKeyword('sequence').suppress()
+        DICTIONARY = CaselessKeyword('dictionary').suppress()
+
         literal = integer | QuotedString('"', escChar='\\')
         literal.setParseAction(lambda t: o.Literal(t[0]))  # not strictly necessary to wrap this, but it simplifies working with the syntax tree
 
