@@ -2,15 +2,6 @@ from setuptools import setup, find_packages
 import setuptools.command.test
 
 
-class TestCommand(setuptools.command.test.test):
-    """Setuptools test command explicitly using test discovery."""
-    # see http://stackoverflow.com/a/23443087/1889401
-
-    def _test_args(self):
-        yield 'discover'
-        yield from super(TestCommand, self)._test_args()
-
-
 setup(
     name='dlvhex',
     version='0.0.1',
@@ -28,7 +19,4 @@ setup(
     license='MIT',
 
     test_suite='dlvhex.tests',
-    cmdclass={
-        'test': TestCommand,
-    },
 )
