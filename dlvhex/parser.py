@@ -110,10 +110,13 @@ def RawInputSpecParser():
         # - access a field on a variable:               node.label
         # - accessing a fixed index in a collection:    some_tuple[3]
         # - chainable:                                  node.neighbors[2].label
-        field_accessor = dot + py_identifier
-        index_accessor = lbracket + integer + rbracket  # TODO: Allow quoted string literals as keys
-        accessor = var('var') + Group(ZeroOrMore(field_accessor | index_accessor))('path')
+        field_accessor = dot + py_identifier('name')
+        subscript = integer | QuotedString('"', escChar='\\')
+        subscript_accessor = lbracket + subscript('key') + rbracket
+        accessor = var('var') + Group(ZeroOrMore(field_accessor | subscript_accessor))('path')
         #
+        field_accessor.setParseAction(lambda t: i.Attribute(t.name))
+        subscript_accessor.setParseAction(lambda t: i.Subscript(t.key))
         accessor.setParseAction(lambda t: i.Accessor(t.var, t.path))
 
         # Iterating over objects, some examples:

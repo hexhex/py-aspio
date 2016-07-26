@@ -112,16 +112,43 @@ class TupleMatch(AssignmentTarget):
         return '({0})'.format(', '.join(str(t) for t in self._targets))
 
 
-class Accessor:
-    def __init__(self, variable: Variable, attribute_path: Sequence[Union[int, str]]) -> None:
-        self._variable = variable
-        self._attribute_path = tuple(attribute_path)
-        # TODO:
-        # We should also allow string subscripts (would allow easy access to dicts with fixed keys, e.g. JSON data)
-        # => don't store raw int and str objects in the attribute_path, wrap them in Attribute(name) and Subscript(index_or_key) classes.
+class Attribute:
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def access(self, obj: Any) -> Any:
+        try:
+            return getattr(obj, self._name)
+        except AttributeError:
+            # Raise a ValueError, since this situation occurs when the user passes wrong input arguments to the program
+            raise ValueError('Unable to access attribute {0!r} on object {1!r} during INPUT mapping'.format(self._name, obj))
 
     def __str__(self) -> str:
-        return str(self._variable) + ''.join('.' + repr(attr) for attr in self._attribute_path)
+        return '.' + str(self._name)
+
+
+class Subscript:
+    def __init__(self, key: object) -> None:
+        self._key = key
+
+    def access(self, obj: Any) -> Any:
+        try:
+            return obj[self._key]
+        except (KeyError, IndexError, TypeError):
+            # Raise a ValueError, since this situation occurs when the user passes wrong input arguments to the program
+            raise ValueError('Unable to access subscript [{0!r}] on object {1!r} during INPUT mapping'.format(self._key, obj))
+
+    def __str__(self) -> str:
+        return '[{0}]'.format(repr(self._key))
+
+
+class Accessor:
+    def __init__(self, variable: Variable, path: Sequence[Union[Attribute, Subscript]]) -> None:
+        self._variable = variable
+        self._path = tuple(path)
+
+    def __str__(self) -> str:
+        return str(self._variable) + ''.join(map(str, self._path))
 
     def check_variable_bindings(self, bound_variables: AbstractSet[Variable]) -> None:
         if self._variable not in bound_variables:
@@ -130,13 +157,8 @@ class Accessor:
     def perform_access(self, context: Context) -> Any:
         '''Performs the represented object access relative to the given context.'''
         result = context[self._variable]
-        for attr in self._attribute_path:
-            if isinstance(attr, int):
-                # index access
-                result = result[attr]  # TODO: handle errors (throw ValueError)
-            else:
-                # attribute access
-                result = getattr(result, attr)  # TODO: handle errors (throw ValueError)
+        for attr in self._path:
+            result = attr.access(result)
         return result
 
 
