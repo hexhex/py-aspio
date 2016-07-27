@@ -25,7 +25,7 @@ class TestProgram(unittest.TestCase):
     def test_string_escaping(self):
         p = Program(code=r'''
             %! INPUT (str) { p(str); }
-            %! OUTPUT { strs = set { predicate: p(X); content: X; } }
+            %! OUTPUT { strs = set { query: p(X); content: X; } }
         ''')
         strings = [
             'abc',

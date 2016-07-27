@@ -13,7 +13,7 @@ class TestOutput(unittest.TestCase):
             result = Program(code=r'''
                 %! OUTPUT {
                 %!  a = (X),
-                %!  b = set { predicate: p(X); content: (X, &a); }
+                %!  b = set { query: p(X); content: (X, &a); }
                 %! }
                 p(1). p(2).
                 ''').solve_one()
@@ -46,7 +46,7 @@ class TestOutput(unittest.TestCase):
             p(xyz, 2).
 
             %! OUTPUT {
-            %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
+            %!  xs = sequence { query: p(X, I); content: X; index: I; }
             %! }
         ''').solve_one().xs
         assert xs == ['def', 'abc', 'xyz']
@@ -59,7 +59,7 @@ class TestOutput(unittest.TestCase):
                 p(xyz, 2).
 
                 %! OUTPUT {
-                %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
+                %!  xs = sequence { query: p(X, I); content: X; index: I; }
                 %! }
             ''').solve_one().xs
         # duplicate index
@@ -70,7 +70,7 @@ class TestOutput(unittest.TestCase):
                 p(xyz, 1).
 
                 %! OUTPUT {
-                %!  xs = sequence { predicate: p(X, I); content: X; index: I; }
+                %!  xs = sequence { query: p(X, I); content: X; index: I; }
                 %! }
             ''').solve_one().xs
 
@@ -81,7 +81,7 @@ class TestOutput(unittest.TestCase):
             p(xyz, 2).
 
             %! OUTPUT {
-            %!  d = dictionary { predicate: p(K, V); content: V; key: K; }
+            %!  d = dictionary { query: p(K, V); content: V; key: K; }
             %! }
         ''').solve_one().d
         assert d == {'def': 0, 'abc': 1, 'xyz': 2}
@@ -94,7 +94,7 @@ class TestOutput(unittest.TestCase):
                 p(xyz, 2).
 
                 %! OUTPUT {
-                %!  d = dictionary { predicate: p(K, V); content: V; key: K; }
+                %!  d = dictionary { query: p(K, V); content: V; key: K; }
                 %! }
             ''').solve_one().d
 
@@ -114,7 +114,7 @@ class TestOutput(unittest.TestCase):
             %!  % Here, we only extract the first argument.
             %!  % Since it is the same in all three p-facts, we will get only one result object.
             %!  % We use IdentityTuple to make sure the deduplication is not performed after the mapping by the 'set' container.
-            %!  xs = set { predicate: p(X, Y); content: IdentityTuple(X); }
+            %!  xs = set { query: p(X, Y); content: IdentityTuple(X); }
             %! }
         ''')
         # TODO: Are these the semantics we want?

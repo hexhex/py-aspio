@@ -9,8 +9,8 @@
 %!  s = "string literal",
 %!  color = set { color },
 %!  color2 = set {
-%!      predicate: color(X, C);
-%!      content: (X, C, set { predicate: edge(X, Y); content: (Y); });
+%!      query: color(X, C);
+%!      content: (X, C, set { query: edge(X, Y); content: (Y); });
 %!  }
 %! }
 

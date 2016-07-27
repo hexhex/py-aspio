@@ -53,7 +53,7 @@ class TestParser(unittest.TestCase):
             r'OUTPUT{}',
             r'OUTPUT{simple_nodes=set{node}}',
             r'OUTPUT{static_object=SomeClass()}',
-            r'OUTPUT{x=set{predicate:p("literal;with;semicolon");content:();}}',
+            r'OUTPUT{x=set{query:p("literal;with;semicolon");content:();}}',
             r'''
                 OUTPUT {
                     i = 25,
@@ -64,9 +64,9 @@ class TestParser(unittest.TestCase):
             r'''
                 OUTPUT {
                     colored_nodes2 = sequence {
-                        predicate: color(X, C, I);
+                        query: color(X, C, I);
                         index: I;
-                        content: ColoredNode(X, C, set { predicate: value(X, V); content: V; });   % TODO: how to implement things like this?
+                        content: ColoredNode(X, C, set { query: value(X, V); content: V; });   % TODO: how to implement things like this?
                     }
                 }
             ''',
@@ -74,24 +74,24 @@ class TestParser(unittest.TestCase):
                 OUTPUT {
                     % a comment about the output
                     colored_tuples = sequence {
-                        predicate: color(X, C, I);
+                        query: color(X, C, I);
                         index: I;
                         content: (X, C);
                     },
                     colored_nodes = sequence {
-                        predicate: color(X, C, I);
+                        query: color(X, C, I);
                         index: I;
                         content: ColoredNode(X, C);
                     },
                     graph = mypackage.mymodule.Graph(&colored_nodes),
                     graph2 = mypackage.mymodule.Graph2(
-                        set { predicate: vertex(X); content: (X); },
+                        set { query: vertex(X); content: (X); },
                         set { arc },
                         mypackage.mymodule.Blah(&colored_nodes),
                         &colored_tuples,
                     ),
                     new_nodes = set {
-                        predicate:
+                        query:
                             node(X),
                             color(X, C),
                             value(X, V);

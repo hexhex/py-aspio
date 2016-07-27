@@ -161,7 +161,7 @@ def RawOutputSpecParser():
     '''Syntax of the OUTPUT statement (and nothing else).'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
         OUTPUT = CaselessKeyword('OUTPUT').suppress()
-        PREDICATE = CaselessKeyword('predicate').suppress()
+        QUERY = CaselessKeyword('query').suppress()
         INDEX = CaselessKeyword('index').suppress()
         KEY = CaselessKeyword('key').suppress()
         CONTENT = CaselessKeyword('content').suppress()
@@ -189,16 +189,16 @@ def RawOutputSpecParser():
         expr = Forward()
 
         # TODO: Instead of semicolon, we could use (semicolon | FollowedBy(rbrace)) to make the last semicolon optional (but how would that work with asp_query...)
-        predicate_clause = PREDICATE + colon + asp_query('query') + semicolon
+        query_clause = QUERY + colon + asp_query('query') + semicolon
         content_clause = CONTENT + colon + expr('content') + semicolon
         index_clause = INDEX + colon + asp_variable_name('index') + semicolon
         key_clause = KEY + colon + expr('key') + semicolon
         #
         simple_set_spec = SET + lbrace + predicate_name('predicate') + rbrace
-        set_spec = SET + lbrace + (predicate_clause & content_clause) + rbrace
+        set_spec = SET + lbrace + (query_clause & content_clause) + rbrace
         # TODO: add clause like "at_missing_index: skip;", "at_missing_index: 0;", "at_missing_index: None;"
-        sequence_spec = SEQUENCE + lbrace + (predicate_clause & content_clause & index_clause) + rbrace
-        dictionary_spec = DICTIONARY + lbrace + (predicate_clause & content_clause & key_clause) + rbrace
+        sequence_spec = SEQUENCE + lbrace + (query_clause & content_clause & index_clause) + rbrace
+        dictionary_spec = DICTIONARY + lbrace + (query_clause & content_clause & key_clause) + rbrace
         expr_collection = set_spec | simple_set_spec | sequence_spec | dictionary_spec
         #
         simple_set_spec.setParseAction(lambda t: o.ExprSimpleSet(t.predicate))
