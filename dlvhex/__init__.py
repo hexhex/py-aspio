@@ -2,7 +2,7 @@ from .errors import CircularReferenceError, InvalidIndicesError, RedefinedNameEr
 from .input import InputSpec
 from .output import OutputSpec
 from .program import Program
-from .registry import register, import_from_module
+from .registry import register, register_dict, import_from_module
 from .solver import Solver, SolverError
 
 debug = False  # type: bool
@@ -20,6 +20,7 @@ __all__ = [
     'Program',
     #
     'register',
+    'register_dict',
     'import_from_module',
     #
     'Solver',

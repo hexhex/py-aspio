@@ -1,6 +1,6 @@
 from copy import copy
 from types import ModuleType
-from typing import Iterable, Optional, Union
+from typing import Iterable, Mapping, Optional, Union
 from .solver import Solver, Results, Result
 from .input import InputSpec
 from .output import OutputSpec
@@ -99,6 +99,9 @@ class Program:
 
     def register(self, name: str, constructor: Constructor, *, replace: bool = False) -> None:
         self.local_registry.register(name, constructor, replace=replace)
+
+    def register_dict(self, name_dict: Mapping[str, object]) -> None:
+        self.local_registry.register_dict(name_dict)
 
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
         self.local_registry.import_from_module(names, module_or_module_name, package)
