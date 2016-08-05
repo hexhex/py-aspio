@@ -1,13 +1,14 @@
 import collections
 import enum
+import logging
 import numbers
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet
 from typing.io import TextIO  # type: ignore
-import dlvhex
 from . import parser
 from .errors import RedefinedNameError, UndefinedNameError
 
+log = logging.getLogger(__name__)
 
 Context = Dict['Variable', Any]
 
@@ -48,8 +49,9 @@ class StreamAccumulator(FactAccumulator):
                 self._stream.write(',')
             self._stream.write(self.arg_str(arg))
         self._stream.write(').\n')
-        if dlvhex.debug:
-            print(predicate, args, '\t=> ' + predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')')  # TODO: more sophisticated approach... "tee" output stream to stderr in constructor? see also http://stackoverflow.com/a/4985080/1889401
+        if log.isEnabledFor(logging.DEBUG):
+            fact = predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')'
+            log.debug('StreamAccumulator: Adding fact for predicate %r with args %r:\t=> %s', predicate, args, fact)
 
 
 class AssignmentTarget(metaclass=ABCMeta):

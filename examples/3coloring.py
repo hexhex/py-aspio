@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 
 import dlvhex
+import logging
 import os.path as p
 
+# Enable debug messages from dlvhex
+dlvhex.log.addHandler(logging.StreamHandler())
+dlvhex.log.setLevel(logging.DEBUG)
 
 class Node:
     def __init__(self, label):
         self.label = label
 
 
-def main():
-    dlvhex.debug = True
+dlvhex.register_dict(globals())
 
+
+def main():
     asp_file = p.join(p.dirname(p.realpath(__file__)), '3coloring.dl')
 
     prog = dlvhex.Program(filename=asp_file)

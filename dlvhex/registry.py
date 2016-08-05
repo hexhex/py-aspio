@@ -1,8 +1,8 @@
 import importlib
+import logging
 from copy import copy
 from types import ModuleType
 from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, Union  # noqa
-import dlvhex
 
 __all__ = [
     'Constructor',
@@ -13,6 +13,7 @@ __all__ = [
     'Registry',
 ]
 
+log = logging.getLogger(__name__)
 
 Constructor = Callable[..., object]
 
@@ -42,8 +43,7 @@ class Registry:
             raise ValueError('Name {0!r} is already registered. Pass replace=True to re-register.'.format(name))
         if not callable(constructor):
             raise ValueError('The constructor argument must be callable.')
-        if dlvhex.debug:
-            print('Registry.register: registering name {0!r} with constructor {1!r}'.format(name, constructor))
+        log.debug('Registry: registering name %r with constructor %r', name, constructor)
         self._registered_names[name] = constructor
 
     def register_dict(self, name_dict: Mapping[str, Any]) -> None:
