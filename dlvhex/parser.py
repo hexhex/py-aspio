@@ -11,6 +11,7 @@ from pyparsing import (  # type: ignore
     CharsNotIn,
     Forward,
     Group,
+    Keyword,
     Literal,
     OneOrMore,
     Optional,
@@ -92,17 +93,17 @@ def RawInputSpecParser():
         SEQUENCE = CaselessKeyword('sequence').suppress()
         DICTIONARY = CaselessKeyword('dictionary').suppress()
 
+        target = Forward()
+        anonymous_var = Keyword('_')  # TODO: Test case with anonymous variable in INPUT
         # Keywords cannot be used as variable names (we still allow "INPUT" as it never occurs inside the spec)
         input_keyword = SET | SEQUENCE | DICTIONARY | FOR | IN
         var = (~input_keyword + Word(alphas + '_', alphanums + '_')).setName('variable')
-        #
-        var.setParseAction(lambda t: i.Variable(str(t[0])))
-
-        # The target of an assignment, supporting tuple unpacking as a simple form of pattern matching in addition to plain variables
-        target = Forward()
         tuple_match = lpar + target + ZeroOrMore(comma + target) + Optional(comma) + rpar
-        target << (var | tuple_match)
+        # The target of an assignment, supporting tuple unpacking as a simple form of pattern matching in addition to plain variables
+        target << (anonymous_var | var | tuple_match)
         #
+        anonymous_var.setParseAction(lambda: i.AnonymousVariable())
+        var.setParseAction(lambda t: i.Variable(str(t[0])))
         tuple_match.setParseAction(lambda t: i.TupleMatch(t))
 
         # Accessing objects, some examples:

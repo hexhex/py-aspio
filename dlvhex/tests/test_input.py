@@ -26,19 +26,23 @@ class TestInput(unittest.TestCase):
         spec = InputSpec.parse(r'''
             INPUT (xs, ys) {
                 p(x[0], x[1]) for x in set xs;      % a comment about the spec
+                p2(a, b) for (a, b) in set xs;      % tuple unpacking
                 q(y) for x in xs for y in x;
                 r(xs[2][1]);
                 empty();
                 seq(i, x[0]) for (i, x) in sequence xs;
+                seq2(i, a) for (i, (a, _)) in sequence xs;
                 dict(value, key) for (key, value) in dictionary ys;
                 str(ys["abc"]);
             } % comment at the end''')
         expected_result = {
             'p': set(xs),
+            'p2': set(xs),
             'q': set((y,) for x in xs for y in x),
             'r': set([('def',)]),  # Note: need to wrap the tuple in an iterable, because set() will iterate over its argument
             'empty': set([tuple()]),
             'seq': set((i, x[0]) for (i, x) in enumerate(xs)),
+            'seq2': set((i, x[0]) for (i, x) in enumerate(xs)),
             'dict': set((v, k) for (k, v) in ys.items()),
             'str': set([('xyz',)]),
         }

@@ -64,6 +64,20 @@ class AssignmentTarget(metaclass=ABCMeta):
         pass
 
 
+class AnonymousVariable(AssignmentTarget):
+    def check_and_update_variable_bindings(self, bound_variables: MutableSet['Variable']) -> None:
+        pass
+
+    def assign(self, value: Any, context: Context) -> None:
+        pass
+
+    def __repr__(self):
+        return 'AnonymousVariable()'
+
+    def __str__(self):
+        return '_'
+
+
 class Variable(AssignmentTarget):
     def __init__(self, name: str) -> None:
         assert len(name) > 0

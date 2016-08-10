@@ -20,6 +20,7 @@ class TestParser(unittest.TestCase):
                     p(nodes[1].label);
                     node(n.label) for n in set nodes;
                     edge(n.label, m.label, m.prop[3]) for n in nodes for (i, m) in sequence n.neighbors;
+                    p(x) for (x, (_, y)) in obj;  % tuple unpacking and anonymous variables
                 }
             ''',
         ]
@@ -35,6 +36,7 @@ class TestParser(unittest.TestCase):
             r'INPUT ( )',  # no body
             r'INPUT (x,y,z) { p(x, y) q(z) }',  # no semicolon after predicates
             r'INPUT (set) { p(x) for x in set; }',  # keywords are not allowed as variable names
+            r'INPUT (set) { p(_) for _ in set; }',  # no anonymous variable in arguments
             r'INPUT (for) { p(x) for x in set for; }',
             r'INPUT (s) { p(x) for x in set for y in set; }',  # should raise a ParseException and not an UndefinedNameError
         ]
