@@ -2,8 +2,7 @@ import os
 import tempfile
 import warnings
 import weakref
-from typing import Any
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 
 __all__ = [
     'FilesystemIPC',
@@ -12,15 +11,17 @@ __all__ = [
 ]
 
 
-class FilesystemIPC:
-    def __init__(self):
+class FilesystemIPC(ABC):
+    '''An IPC mechanism that is accessible via the filesystem.'''
+
+    def __init__(self) -> None:
         self.name = None  # type: str
 
     @abstractmethod
-    def cleanup(self):
+    def cleanup(self) -> None:
         pass
 
-    def __enter__(self):
+    def __enter__(self) -> str:
         return self.name
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -33,7 +34,7 @@ def _warn_cleanup(typename, filename):
 
 
 class TemporaryNamedPipe(FilesystemIPC):
-    def __init__(self):
+    def __init__(self) -> None:
         '''Create a temporary named pipe.
 
         The path to the named pipe can be retrieved from the `name` attribute on the returned object.
@@ -49,7 +50,7 @@ class TemporaryNamedPipe(FilesystemIPC):
             self.name = os.path.join(self.tmpdir.name, 'pipe')
             os.mkfifo(self.name)  # may raise OSError
 
-            self._cleanup_warning = weakref.finalize(self, _warn_cleanup, type(self).__name__, self.name)
+            self._cleanup_warning = weakref.finalize(self, _warn_cleanup, type(self).__name__, self.name)  # type: ignore
             self._cleanup_warning.atexit = True
         else:
             # Notes about a possible Windows implementation:
@@ -68,14 +69,14 @@ class TemporaryNamedPipe(FilesystemIPC):
             #   For now, fall back to a temporary file on Windows.
             raise NotImplementedError()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self._cleanup_warning.peek() is not None:
             self.tmpdir.cleanup()
             self._cleanup_warning.detach()
 
 
 class TemporaryFile(FilesystemIPC):
-    def __init__(self):
+    def __init__(self) -> None:
         '''Create a temporary file.
 
         The path to the file can be retrieved from the `name` attribute on the returned object.
@@ -89,10 +90,10 @@ class TemporaryFile(FilesystemIPC):
         # (possible problems: we might leak a file descriptor, or close it twice (thus risking to close another unrelated file))
         os.close(fd)
 
-        self._cleanup_warning = weakref.finalize(self, _warn_cleanup, type(self).__name__, self.name)
+        self._cleanup_warning = weakref.finalize(self, _warn_cleanup, type(self).__name__, self.name)  # type: ignore
         self._cleanup_warning.atexit = True
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self._cleanup_warning.peek() is not None:
             os.remove(self.name)
             self._cleanup_warning.detach()
