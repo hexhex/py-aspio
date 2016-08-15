@@ -42,7 +42,7 @@ class Solver:
         for code in program.code_parts:
             text_stream.write(code)
 
-    def run(self, program: 'p.Program', input_args: Sequence[Any], *, cache: bool) -> 'Results':
+    def run(self, program: 'p.Program', input_args: Sequence[Any], *, cache: bool, options: Sequence[str]) -> 'Results':
         '''Run the dlvhex solver on the given program.'''
         # Prefer named pipes, but fall back to a file if pipes are not implemented for the current platform
         try:
@@ -59,30 +59,33 @@ class Solver:
                 '--filter=' + ','.join(program.output_spec.captured_predicates()),
                 # wait for a newline on stdin between answer sets
                 '--waitonmodel',
-                # tell dlvhex2 to read our input from the named pipe
-                tmp_input.name,
             ]
+            # options passed in by caller
+            args.extend(options)
+            # tell dlvhex2 to read our input from the named pipe
+            args.append(tmp_input.name)
             args.extend(program.file_parts)
 
-            # If we have a file, we must pass the data before starting the subprocess
+            # If we have a temporary file, we must pass the data before starting the subprocess
             if isinstance(tmp_input, TemporaryFile):
-                with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stdin:
-                    self._write_input(program, input_args, text_stdin)
-            # Start dlvhex2 subprocess.
-            # It needs to be running before we pass any input on the named pipe, or we risk a deadlock by filling the pipe's buffer.
+                with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stream:
+                    self._write_input(program, input_args, text_stream)
+
+            # Start dlvhex2 subprocess
             process = Popen(
                 args,
                 stdin=PIPE,
                 stdout=PIPE,
                 stderr=PIPE,
             )
-            try:
-                # If we have a named pipe, we must pass the data after starting the subprocess
-                if isinstance(tmp_input, TemporaryNamedPipe):
-                    with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stdin:
-                        self._write_input(program, input_args, text_stdin)
 
-                # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
+            try:
+                # If we have a named pipe, we must pass the data after starting the subprocess, or we risk a deadlock by filling the pipe's buffer
+                if isinstance(tmp_input, TemporaryNamedPipe):
+                    with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stream:
+                        self._write_input(program, input_args, text_stream)
+                    # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
+
                 reader = DlvhexLineReader(process=process, encoding=self.encoding, tmp_input=tmp_input)
                 return Results(
                     answer_sets=AnswerSetParserIterable(reader),
@@ -164,7 +167,7 @@ class DlvhexLineReader(ClosableIterable[str]):
     def close(self) -> None:
         self._finalize()
 
-    # We cannot have a reference to `self` to avoid reference cycles (see weakref.finalize documentation).
+    # We cannot have a reference to `self` because we must avoid reference cycles here (see weakref.finalize documentation).
     @staticmethod
     def __close(process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input: FilesystemIPC) -> None:
         '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
@@ -192,7 +195,10 @@ class DlvhexLineReader(ClosableIterable[str]):
         process.stdin.close()
         process.stdout.close()
         stderr_capture_thread.join()  # ensure cleanup of stderr
-        tmp_input.cleanup()  # remove the temporary input pipe/file
+        # Remove the temporary input pipe/file
+        # Note: To clean up tmp_input in a reliable way, we must be sure dlvhex2 has already read all the data (or, has at the very least opened the file).
+        #       Because of this, the earliest point where we are able to clean up tmp_input would be when dlvhex2 starts outputting the first answer set.
+        tmp_input.cleanup()
         if process.returncode != 0:
             err = SolverSubprocessError(process.returncode, str(stderr_capture_thread.data, encoding=stderr_encoding))
             process.returncode = 0  # make sure we only raise an error once

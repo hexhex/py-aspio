@@ -1,6 +1,6 @@
 from copy import copy
 from types import ModuleType
-from typing import Iterable, Mapping, Optional, Union
+from typing import Iterable, List, Mapping, Optional, Sequence, Union
 from .solver import Solver, Results, Result
 from .input import InputSpec
 from .output import OutputSpec
@@ -106,23 +106,27 @@ class Program:
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
         self.local_registry.import_from_module(names, module_or_module_name, package)
 
-    def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = False) -> Results:
+    def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = True, options: Optional[Sequence[str]] = None) -> Results:
         '''Solve the ASP program with the given input arguments and return a collection of answer sets.
 
-        If deterministic cleanup of the solver subprocess is required, call close() on the returned object.
-        Alternatively, use the returned object as a context manager in a `with` statement.
+        If deterministic cleanup of the solver subprocess is required, call close() on the returned object,
+        or use the returned object as a context manager in a `with` statement.
         '''
         # TODO: Also allow to pass input arguments as keyword arguments, with names as defined in the input spec
         if solver is None:
             solver = self.solver
         if solver is None:
             solver = Solver()
-        return solver.run(self, input_arguments, cache=cache)
+        if options is None:
+            options = []
+        return solver.run(self, input_arguments, cache=cache, options=options)
 
-    def solve_one(self, *input_arguments, solver: Optional[Solver] = None) -> Optional[Result]:
+    def solve_one(self, *input_arguments, solver: Optional[Solver] = None, options: Optional[Sequence[str]] = None) -> Optional[Result]:
         '''Solve the ASP program and return one of the computed answer sets, or None if no answer set exists. No special cleanup is necessary.'''
-        # TODO: Use additional solver option '--number=1'
-        with self.solve(*input_arguments, solver=solver, cache=False) as results:
+        if options is None:
+            options = []
+        options.append('--number=1')
+        with self.solve(*input_arguments, solver=solver, cache=False, options=options) as results:
             try:
                 return next(iter(results))
             except StopIteration:
