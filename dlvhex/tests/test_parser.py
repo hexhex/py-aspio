@@ -53,14 +53,14 @@ class TestParser(unittest.TestCase):
     def test_valid_output_spec(self):
         valid_output_specs = [
             r'OUTPUT{}',
-            r'OUTPUT{simple_nodes=set{node}}',
-            r'OUTPUT{static_object=SomeClass()}',
-            r'OUTPUT{x=set{query:p("literal;with;semicolon");content:();}}',
+            r'OUTPUT{simple_nodes=set{node};}',
+            r'OUTPUT{static_object=SomeClass();}',
+            r'OUTPUT{x=set{query:p("literal;with;semicolon");content:();};}',
             r'''
                 OUTPUT {
-                    i = 25,
-                    s = "hello",
-                    t = &s
+                    i = 25;
+                    s = "hello";
+                    t = &s;
                 }
             ''',
             r'''
@@ -69,7 +69,7 @@ class TestParser(unittest.TestCase):
                         query: color(X, C, I);
                         index: I;
                         content: ColoredNode(X, C, set { query: value(X, V); content: V; });   % TODO: how to implement things like this?
-                    }
+                    };
                 }
             ''',
             r'''
@@ -79,26 +79,26 @@ class TestParser(unittest.TestCase):
                         query: color(X, C, I);
                         index: I;
                         content: (X, C);
-                    },
+                    };
                     colored_nodes = sequence {
                         query: color(X, C, I);
                         index: I;
                         content: ColoredNode(X, C);
-                    },
-                    graph = mypackage.mymodule.Graph(&colored_nodes),
+                    };
+                    graph = mypackage.mymodule.Graph(&colored_nodes);
                     graph2 = mypackage.mymodule.Graph2(
                         set { query: vertex(X); content: (X); },
                         set { arc },
                         mypackage.mymodule.Blah(&colored_nodes),
                         &colored_tuples,
-                    ),
+                    );
                     new_nodes = set {
                         query:
                             node(X),
                             color(X, C),
                             value(X, V);
                         content: Node(X, C, V);
-                    },
+                    };
                 }
             ''',
         ]

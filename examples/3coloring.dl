@@ -4,14 +4,14 @@
 %! }
 
 %! OUTPUT {
-%!  num = 25,
-%!  simple_edges = set { edge },
-%!  s = "string literal",
-%!  color = set { color },
+%!  num = 25;
+%!  simple_edges = set { edge };
+%!  s = "string literal";
+%!  color = set { color };
 %!  color2 = set {
 %!      query: color(X, C);
 %!      content: (X, C, set { query: edge(X, Y); content: (Y); });
-%!  }
+%!  };
 %! }
 
 color(X, red) v color(X, green) v color(X, blue) :- node(X).

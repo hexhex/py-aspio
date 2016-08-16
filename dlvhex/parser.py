@@ -215,8 +215,8 @@ def RawOutputSpecParser():
         # Note: "|" always takes the first match, that's why we have to parse variable names after obj (otherwise "variable name" might consume the identifier of expr_obj)
         expr << (literal | expr_collection | expr_obj | reference | asp_variable_name)
 
-        named_output_spec = py_identifier('name') + equals + expr('expr')
-        output_statement = OUTPUT + lbrace + Optional(named_output_spec + ZeroOrMore(comma + named_output_spec) + Optional(comma)) + rbrace  # TODO: maybe use semicolon as separator here too
+        named_output_spec = py_identifier('name') + equals + expr('expr') + semicolon
+        output_statement = OUTPUT + lbrace + ZeroOrMore(named_output_spec) + rbrace
         #
         named_output_spec.setParseAction(lambda t: (t.name, t.expr))
         output_statement.setParseAction(lambda t: o.OutputSpec(t))

@@ -38,7 +38,7 @@ class TestSolver(unittest.TestCase):
                     q(X) v r(X) v s(X) v t(X) v u(X) :- p(X, _).
 
                     %! OUTPUT {
-                    %!  d = dictionary { query: p(K, V); content: V; key: K; }
+                    %!  d = dictionary { query: p(K, V); content: V; key: K; };
                     %! }
                 ''')
                 r = prog.solve()
