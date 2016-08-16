@@ -21,7 +21,8 @@ from pyparsing import (  # type: ignore
     Word,
     ZeroOrMore,
 )
-from typing import Iterable, List, Mapping, MutableMapping, Tuple, Union  # noqa
+from typing import MutableMapping  # noqa
+from .helper.typing import AnswerSet, FactArgumentTuple  # noqa
 from . import input as i
 from . import output as o
 
@@ -304,12 +305,6 @@ class EmbeddedSpecParser:
 
     def parseString(self, string, *, parseAll=True):
         return (_parse(type(self).spec_parser, type(self).extractFromString(string)),)
-
-
-# These should actually be import from the .output module, but mypy currently does not support importing type aliases.
-# Until mypy fixes this, we just redefine the types here as a workaround.
-FactArgumentTuple = Tuple[str, ...]
-AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
 
 
 def AnswerSetParser():

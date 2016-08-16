@@ -1,15 +1,12 @@
 import io
 import signal
+import subprocess  # type: ignore
 import weakref
-from subprocess import Popen, PIPE, TimeoutExpired  # type: ignore
-from typing import Any, Generic, IO, Iterable, Iterator, Mapping, Sequence, Tuple, TypeVar, Union
-from .errors import UndefinedNameError, SolverError, SolverSubprocessError
-from .helper import CachingIterable, FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
-from .input import InputSpec, StreamAccumulator
-from .output import OutputSpec
-from .parser import parse_answer_set, ParseException  # type: ignore
-from .registry import Registry
-from . import program as p  # noqa
+from typing import Callable, IO, Iterable, Iterator
+from .helper.typing import AnswerSet, ClosableIterable
+from .errors import SolverError, SolverSubprocessError
+from .helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
+from .parser import parse_answer_set, ParseException
 
 __all__ = [
     'Solver',
@@ -22,7 +19,6 @@ class Solver:
     # TODO: Check what encoding dlvhex2 expects (on stdin and for input files) -- this is not supposed to be an option, but the encoding that dlvhex2 uses to read from stdin (and input files)
     default_encoding = 'UTF-8'
 
-    # TODO: Some way to pass dlvhex options like maxint
     def __init__(self, *, executable: str = None) -> None:
         '''Initialize a dlvhex2 solver instance.
 
@@ -31,18 +27,11 @@ class Solver:
         self.executable = executable if executable is not None else 'dlvhex2'
         self.encoding = Solver.default_encoding
 
-    def _write_input(self, program: 'p.Program', input_args: Sequence[Any], text_stream: IO[str]):
-        '''Write all facts and rules that are needed in addition to the original ASP code to the given stream.'''
-        # Map input data and pass it over stdin
-        # Raises exception if the input arguments are not as expected (e.g., wrong count, an attribute does not exist, ...)
-        program.input_spec.perform_mapping(input_args, StreamAccumulator(text_stream))
-        # Additional rules required for output mapping
-        text_stream.write('\n'.join(str(rule) for rule in program.output_spec.additional_rules()))
-        # Pass code given as string over stdin
-        for code in program.code_parts:
-            text_stream.write(code)
-
-    def run(self, program: 'p.Program', input_args: Sequence[Any], *, cache: bool, options: Sequence[str]) -> 'Results':
+    def run(self, *,
+            write_input: Callable[[IO[str]], None],
+            capture_predicates: Iterable[str],
+            file_args: Iterable[str],
+            options: Iterable[str]) -> ClosableIterable[AnswerSet]:
         '''Run the dlvhex solver on the given program.'''
         # Prefer named pipes, but fall back to a file if pipes are not implemented for the current platform
         try:
@@ -56,7 +45,7 @@ class Solver:
                 # only print the answer sets themselves
                 '--silent',
                 # only capture relevant predicates
-                '--filter=' + ','.join(program.output_spec.captured_predicates()),
+                '--filter=' + ','.join(capture_predicates),
                 # wait for a newline on stdin between answer sets
                 '--waitonmodel',
             ]
@@ -64,35 +53,30 @@ class Solver:
             args.extend(options)
             # tell dlvhex2 to read our input from the named pipe
             args.append(tmp_input.name)
-            args.extend(program.file_parts)
+            args.extend(file_args)
 
             # If we have a temporary file, we must pass the data before starting the subprocess
             if isinstance(tmp_input, TemporaryFile):
-                with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stream:
-                    self._write_input(program, input_args, text_stream)
+                with open(tmp_input.name, 'wt', encoding=self.encoding) as stream:
+                    write_input(stream)
 
             # Start dlvhex2 subprocess
-            process = Popen(
+            process = subprocess.Popen(
                 args,
-                stdin=PIPE,
-                stdout=PIPE,
-                stderr=PIPE,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
 
             try:
                 # If we have a named pipe, we must pass the data after starting the subprocess, or we risk a deadlock by filling the pipe's buffer
                 if isinstance(tmp_input, TemporaryNamedPipe):
-                    with open(tmp_input.name, 'wt', encoding=self.encoding) as text_stream:
-                        self._write_input(program, input_args, text_stream)
+                    with open(tmp_input.name, 'wt', encoding=self.encoding) as stream:
+                        write_input(stream)
                     # At this point the input pipe is flushed and closed, and dlvhex2 starts processing
 
-                reader = DlvhexLineReader(process=process, encoding=self.encoding, tmp_input=tmp_input)
-                return Results(
-                    answer_sets=AnswerSetParserIterable(reader),
-                    output_spec=program.output_spec,
-                    registry=program.local_registry,
-                    cache=cache,
-                )
+                lines = DlvhexLineReader(process=process, encoding=self.encoding, tmp_input=tmp_input)
+                return AnswerSetParserIterable(lines)
             except:
                 process.kill()
                 # Close streams to prevent ResourceWarnings
@@ -105,14 +89,6 @@ class Solver:
             raise
 
 
-T = TypeVar('T', covariant=True)
-
-
-class ClosableIterable(Generic[T], Iterable[T]):
-    def close(self):
-        pass
-
-
 class DlvhexLineReader(ClosableIterable[str]):
     '''Wraps a process and provides its standard output for line-based iteration.
 
@@ -122,7 +98,7 @@ class DlvhexLineReader(ClosableIterable[str]):
     a SolverSubprocessError will be thrown during iteration, containing the return code and stderr output of the process.
     '''
 
-    def __init__(self, *, process: Popen, encoding: str, tmp_input: FilesystemIPC) -> None:
+    def __init__(self, *, process: subprocess.Popen, encoding: str, tmp_input: FilesystemIPC) -> None:
         self.process = process
         self.stdout_encoding = encoding
         self.iterating = False
@@ -160,7 +136,7 @@ class DlvhexLineReader(ClosableIterable[str]):
         # Give it a chance to terminate gracefully.
         try:
             self.process.wait(timeout=0.005)
-        except TimeoutExpired:
+        except subprocess.TimeoutExpired:
             pass
         self.close()
 
@@ -169,14 +145,14 @@ class DlvhexLineReader(ClosableIterable[str]):
 
     # We cannot have a reference to `self` because we must avoid reference cycles here (see weakref.finalize documentation).
     @staticmethod
-    def __close(process: Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input: FilesystemIPC) -> None:
+    def __close(process: subprocess.Popen, stderr_capture_thread: StreamCaptureThread[bytes], stderr_encoding: str, tmp_input: FilesystemIPC) -> None:
         '''Shut down the process if it is still running. Raise a SolverSubprocessError if the process exited with an error.'''
         if process.poll() is None:
             # Still running? Kill the subprocess
             process.terminate()
             try:
                 process.wait(timeout=0.001)
-            except TimeoutExpired:
+            except subprocess.TimeoutExpired:
                 # Kill unconditionally after a short timeout.
                 # A potential problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
                 process.kill()
@@ -205,12 +181,6 @@ class DlvhexLineReader(ClosableIterable[str]):
             raise err
 
 
-# These should actually be import from the .output module, but mypy currently does not support importing type aliases.
-# Until mypy fixes this, we just redefine the types here as a workaround.
-FactArgumentTuple = Tuple[Union[int, str], ...]
-AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
-
-
 class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
     def __init__(self, lines: ClosableIterable[str]) -> None:
         self.lines = lines
@@ -226,83 +196,3 @@ class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
 
     def close(self):
         self.lines.close()
-
-
-class Results(Iterable['Result']):
-    '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
-    # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
-
-    def __init__(self, answer_sets: ClosableIterable[AnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
-        self.output_spec = output_spec
-        self.registry = registry
-        self.answer_sets = answer_sets
-        self.results = (
-            Result(answer_set, self.output_spec, self.registry) for answer_set in self.answer_sets
-        )  # type: Iterable[Result]
-        if cache:
-            self.results = CachingIterable(self.results)
-
-    def __iter__(self) -> Iterator['Result']:
-        # Make sure we can only create one results iterator if we aren't caching
-        assert self.results is not None, 'Pass cache=True if you need to iterate over dlvhex results multiple times.'
-        results = self.results
-        if type(self.results) != CachingIterable:
-            self.results = None
-        yield from results
-
-    def __getattr__(self, name: str) -> Any:
-        if name.startswith('all_'):
-            return ResultsAttributeIterator(self, name[4:])
-        else:
-            raise AttributeError("No attribute with name {0!r}. Prefix an output variable name with 'all_' when iterating over its values for all answer sets.".format(name))
-
-    def close(self) -> None:
-        self.answer_sets.close()
-
-    def __enter__(self) -> 'Results':
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> bool:
-        self.close()
-        return False
-
-
-class ResultsAttributeIterator(Iterator[Any]):
-    '''Helps with cleanup when using shortcuts.'''
-
-    def __init__(self, results, name):
-        self.results = results
-        self.results_iter = iter(results)
-        self.name = name
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return getattr(next(self.results_iter), self.name)
-
-    def close(self):
-        self.results.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-        return False
-
-
-class Result:
-    '''Represents a single answer set.'''
-
-    def __init__(self, answer_set: AnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
-        self._r = output_spec.prepare_mapping(answer_set, registry)
-
-    def get(self, name: str) -> Any:
-        return self._r.get_object(name)
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self.get(name)
-        except UndefinedNameError as e:
-            raise AttributeError(e)

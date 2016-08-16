@@ -3,8 +3,7 @@ import enum
 import logging
 import numbers
 from abc import ABCMeta, abstractmethod
-from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet
-from typing.io import TextIO  # type: ignore
+from typing import Iterable, Any, Union, Dict, IO, Iterator, MutableSet, Sequence, AbstractSet
 from . import parser
 from .errors import RedefinedNameError, UndefinedNameError
 
@@ -20,7 +19,7 @@ class FactAccumulator(metaclass=ABCMeta):
 
 
 class StreamAccumulator(FactAccumulator):
-    def __init__(self, output_stream: TextIO) -> None:
+    def __init__(self, output_stream: IO[str]) -> None:
         if not output_stream.writable:
             raise ValueError('output_stream must be writable')
         self._stream = output_stream
@@ -49,7 +48,7 @@ class StreamAccumulator(FactAccumulator):
                 self._stream.write(',')
             self._stream.write(self.arg_str(arg))
         self._stream.write(').\n')
-        if log.isEnabledFor(logging.DEBUG):
+        if log.isEnabledFor(logging.DEBUG):  # type: ignore
             fact = predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')'
             log.debug('StreamAccumulator: Adding fact for predicate %r with args %r:\t=> %s', predicate, args, fact)
 

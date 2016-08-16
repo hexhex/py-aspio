@@ -1,7 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
-from typing import AbstractSet, Any, Callable, Iterable, Tuple, Optional, Union, Mapping, MutableMapping, Sequence  # noqa
+from typing import AbstractSet, Any, Iterable, Tuple, Optional, Union, Mapping, MutableMapping, Sequence  # noqa
+from .helper.typing import AnswerSet, ASPRule, FactArgumentTuple
 from .errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesError, RedefinedNameError, UndefinedNameError
 from .registry import Registry
 from . import parser
@@ -9,14 +10,6 @@ from . import parser
 __all__ = [
     'OutputSpec'
 ]
-
-# An unprocessed answer set, i.e. simply a set of facts (not yet mapped to any objects).
-# It is stored as mapping from predicate names to a collection of argument tuples.
-FactArgumentTuple = Tuple[Union[int, str], ...]
-AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
-
-
-ASPRule = str  # TODO: Could be a more sophisticated type to support passing the rule to dlvhex directly (when it is used via a shared library)
 
 
 class OutputResult:
@@ -49,7 +42,7 @@ class LocalContext:
         self.va = {}  # type: MutableMapping[str, str]
 
     @contextmanager
-    def assign_variables(self, names: Sequence[str], values: Sequence[str]) -> None:
+    def assign_variables(self, names: Sequence[str], values: Sequence[str]):
             assert len(names) == len(values)
             for (name, value) in zip(names, values):
                 assert name not in self.va

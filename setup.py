@@ -1,6 +1,4 @@
 from setuptools import setup, find_packages
-import setuptools.command.test
-
 
 setup(
     name='dlvhex',
