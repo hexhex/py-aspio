@@ -35,7 +35,7 @@ def main():
         for i, x in enumerate(results):
             print(i, repr(x), repr(x.num), repr(x.s))
 
-        for x in results.color2:
+        for x in results.all_color2:
             print(repr(x))
 
     for ans in prog.solve(nodes, edges):

@@ -130,6 +130,6 @@ class TestOutput(unittest.TestCase):
         # TODO: Are these the semantics we want?
         # Maybe we should use all referenced variables in the rule head, except if suppressed (variable name '_' for unused arguments, like in ASP)
         program.register('IdentityTuple', IdentityTuple)
-        with program.solve().xs as xss:
+        with program.solve().all_xs as xss:
             for xs in xss:
                 assert len(xs) == 1  # one object in the mapped 'xs' result

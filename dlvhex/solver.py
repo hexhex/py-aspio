@@ -251,7 +251,10 @@ class Results(Iterable['Result']):
         yield from results
 
     def __getattr__(self, name: str) -> Any:
-        return ResultsAttributeIterator(self, name)
+        if name.startswith('all_'):
+            return ResultsAttributeIterator(self, name[4:])
+        else:
+            raise AttributeError("No attribute with name {0!r}. Prefix an output variable name with 'all_' when iterating over its values for all answer sets.".format(name))
 
     def close(self) -> None:
         self.answer_sets.close()
