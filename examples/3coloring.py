@@ -3,15 +3,16 @@
 import dlvhex
 import logging
 import os.path as p
+from collections import namedtuple
 
 # Enable debug messages from dlvhex
 dlvhex.log.addHandler(logging.StreamHandler())
 dlvhex.log.setLevel(logging.DEBUG)
 
-class Node:
-    def __init__(self, label):
-        self.label = label
 
+Node = namedtuple('Node', ['label'])
+ColoredNode = namedtuple('ColoredNode', ['label', 'color'])
+Arc = namedtuple('Arc', ['start', 'end'])
 
 dlvhex.register_dict(globals())
 
@@ -25,22 +26,14 @@ def main():
     nb = Node('b')
     nc = Node('c')
     nodes = [na, nb, nc]
-    edges = {
-        na: [nb, nc],
-        nb: [nc]
-    }
+    arcs = [
+        Arc(na, nb),
+        Arc(na, nc),
+        Arc(nb, nc)
+    ]
 
-    with prog.solve(nodes, edges, cache=True) as results:
-        print(results)
-        for i, x in enumerate(results):
-            print(i, repr(x), repr(x.num), repr(x.s))
-
-        for x in results.all_color2:
-            print(repr(x))
-
-    for ans in prog.solve(nodes, edges):
-        print(ans)
-
+    for i, colored_nodes in enumerate(prog.solve(nodes, arcs).all_colored_nodes):
+        print('Answer set {0}:\t{1!r}'.format(i + 1, sorted(colored_nodes)))
 
 if __name__ == '__main__':
     main()

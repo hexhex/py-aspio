@@ -1,18 +1,14 @@
-%! INPUT (nodes: Iterable[Node], edges: Mapping[Node, Iterable[Node]]) {
-%!     node(n.label) for n in nodes;
-%!     edge(n.label, m.label) for (n, neighbors) in dictionary edges for m in neighbors;
-%! }
+%!  INPUT (nodes: Set[Node], arcs: Set[Arc]) {
+%!      node(n.label) for n in nodes;
+%!      edge(arc.start.label, arc.end.label) for arc in arcs;
+%!  }
 
-%! OUTPUT {
-%!  num = 25;
-%!  simple_edges = set { edge };
-%!  s = "string literal";
-%!  color = set { color };
-%!  color2 = set {
-%!      query: color(X, C);
-%!      content: (X, C, set { query: edge(X, Y); content: (Y); });
-%!  };
-%! }
+%!  OUTPUT {
+%!      colored_nodes = set {
+%!          query: color(X, C);
+%!          content: ColoredNode(X, C);
+%!      };
+%!  }
 
 color(X, red) v color(X, green) v color(X, blue) :- node(X).
 
