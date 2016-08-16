@@ -46,10 +46,10 @@ class OutputResult:
 class LocalContext:
     def __init__(self) -> None:
         # Current assignment of ASP variables
-        self.va = {}  # type: MutableMapping[str, Union[int, str]]
+        self.va = {}  # type: MutableMapping[str, str]
 
     @contextmanager
-    def assign_variables(self, names: Sequence[str], values: Sequence[Any]):
+    def assign_variables(self, names: Sequence[str], values: Sequence[str]) -> None:
             assert len(names) == len(values)
             for (name, value) in zip(names, values):
                 assert name not in self.va
@@ -99,10 +99,13 @@ class Variable(Expr):
         assert len(name) > 0
         self.name = name
 
-    def __repr__(self):
-        return 'Variable({0})'.format(repr(self.name))
+    def __str__(self):
+        return self.name
 
-    def perform_mapping(self, r: OutputResult, lc: LocalContext) -> Union[int, str]:
+    def __repr__(self):
+        return 'Variable({0!r})'.format(self.name)
+
+    def perform_mapping(self, r: OutputResult, lc: LocalContext) -> str:
         assert self.name in lc.va
         # TODO: Check this at construction time, and throw an exception then.
         #       During execution we just have the assertion, which can be disabled in release mode.
@@ -127,6 +130,8 @@ class ExprObject(Expr):
             constructor = make_tuple
         else:
             constructor = r.registry.get(self.constructor_name)
+        if constructor is None:
+            raise NotImplementedError('constructor {0} not defined'.format(self.constructor_name))  # TODO
         mapped_args = (subexpr.perform_mapping(r, lc) for subexpr in self.args)
         return constructor(*mapped_args)
 
@@ -198,15 +203,20 @@ class ExprSequence(ExprCollection):
     def __init__(self, query: str, content: Expr, index: Variable) -> None:
         super().__init__(query, [content, index])
         self.content = content
-        self.index = index
+        self.index_pos = self.captured_variable_names.index(index.name)
 
     def perform_mapping(self, r: OutputResult, lc: LocalContext) -> Sequence[Any]:
-        index_pos = self.captured_variable_names.index(self.index.name)
         def index_for(captured_values):
-            return captured_values[index_pos]
+            str_value = captured_values[self.index_pos]
+            try:
+                return int(str_value)
+            except ValueError as e:
+                raise InvalidIndicesError('index variable is not an integer: {0!s}'.format(e))
+
         def content_for(captured_values):
             with lc.assign_variables(self.captured_variable_names, captured_values):
                 return self.content.perform_mapping(r, lc)
+
         # TODO: Options to determine how missing/duplicate indices should be handled
         # Currently: We require the indices to form a range of integers from 0 to n without any duplicates.
         all_captured_values = r.facts.get(self.output_predicate_name, [])

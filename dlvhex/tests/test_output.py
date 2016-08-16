@@ -73,6 +73,16 @@ class TestOutput(unittest.TestCase):
                 %!  xs = sequence { query: p(X, I); content: X; index: I; };
                 %! }
             ''').solve_one().xs
+        # index is not an integer
+        with self.assertRaises(InvalidIndicesError):
+            Program(code=r'''
+                p(def, 0).
+                p(xyz, no).
+
+                %! OUTPUT {
+                %!  xs = sequence { query: p(X, I); content: X; index: I; };
+                %! }
+            ''').solve_one().xs
 
     def test_dictionary(self):
         d = Program(code=r'''
@@ -81,7 +91,7 @@ class TestOutput(unittest.TestCase):
             p(xyz, 2).
 
             %! OUTPUT {
-            %!  d = dictionary { query: p(K, V); content: V; key: K; };
+            %!  d = dictionary { query: p(K, V); content: int(V); key: K; };
             %! }
         ''').solve_one().d
         assert d == {'def': 0, 'abc': 1, 'xyz': 2}

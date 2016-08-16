@@ -308,16 +308,18 @@ class EmbeddedSpecParser:
 
 # These should actually be import from the .output module, but mypy currently does not support importing type aliases.
 # Until mypy fixes this, we just redefine the types here as a workaround.
-FactArgumentTuple = Tuple[Union[int, str], ...]
+FactArgumentTuple = Tuple[str, ...]
 AnswerSet = Mapping[str, Iterable[FactArgumentTuple]]
 
 
 def AnswerSetParser():
     '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
+        # As per the specification, we always return constants as string. Conversion has to be performed explicitly with int().
+        str_integer = Word(nums).setName('integer')
         quoted_string = QuotedString(quoteChar='"', escChar='\\')
         constant_symbol = Word(alphas_lowercase, alphanums + '_')
-        arg = integer | quoted_string | constant_symbol
+        arg = str_integer | quoted_string | constant_symbol
         fact = predicate_name('pred') + Group(Optional(lpar + arg + ZeroOrMore(comma + arg) + rpar))('args')
         answer_set = lbrace + Optional(fact + ZeroOrMore(comma + fact)) + rbrace  # + LineEnd()
         #
@@ -333,8 +335,8 @@ def AnswerSetParser():
                     # but dlvhex2 already performs the deduplication for us
                     # so there is no need to check for collisions again.
                     #
-                    # One problem:
-                    # dlvhex2 seems to consider abc and "abc" (quoted/non-quoted) different,
+                    # Note:
+                    # dlvhex2 differentiates between abc and "abc",
                     # but on the python side it is represented by the same string 'abc'.
                 else:
                     d[pred].append(args)
@@ -348,7 +350,6 @@ def _parse(parser, string):
         result = parser.parseString(string, parseAll=True)
         return result[0]
     except ParseException:
-        # rethrow
         raise
     # except:
     #     pass  # TODO
