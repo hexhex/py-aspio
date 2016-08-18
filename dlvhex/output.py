@@ -122,9 +122,9 @@ class ExprObject(Expr):
                 return tuple(args)
             constructor = make_tuple
         else:
-            constructor = r.registry.get(self.constructor_name)
+            constructor = r.registry.resolve(self.constructor_name)
         if constructor is None:
-            raise NotImplementedError('constructor {0} not defined'.format(self.constructor_name))  # TODO
+            raise NotImplementedError('constructor {0!r} not defined'.format(self.constructor_name))  # TODO
         mapped_args = (subexpr.perform_mapping(r, lc) for subexpr in self.args)
         return constructor(*mapped_args)
 
@@ -138,17 +138,17 @@ class ExprObject(Expr):
         return chain(*(subexpr.captured_predicates() for subexpr in self.args))
 
 
-class ExprSimpleSet(Expr):
-    def __init__(self, predicate_name: str) -> None:
-        self.predicate_name = predicate_name
-
-    def perform_mapping(self, r: OutputResult, lc: LocalContext) -> AbstractSet[FactArgumentTuple]:
-        # Simple set semantics: just take the tuples as-is
-        # TODO: Should we unpack 1-tuples automatically?
-        return frozenset(r.facts.get(self.predicate_name, []))
-
-    def captured_predicates(self) -> Iterable[str]:
-        return [self.predicate_name]
+def ExprSimpleSet(predicate_name: str, arity: int, constructor_name: Optional[str]) -> Expr:
+    print(predicate_name, arity, constructor_name)
+    # Simple set semantics: just take the tuples as-is and put them in a set.
+    variables = [Variable('X' + str(i)) for i in range(arity)]
+    query = predicate_name + '(' + ','.join(map(str, variables)) + ')'
+    if arity == 1 and constructor_name is None:
+        # 1-tuples are unpacked automatically
+        content = variables[0]  # type: Expr
+    else:
+        content = ExprObject(constructor_name, variables)
+    return ExprSet(query, content)
 
 
 # TODO: Separate ABC ExprComposed for the subexpressions? Could then use that in ExprObject too

@@ -79,6 +79,28 @@ class Registry:
         '''Return the constructor registered to `name`, or `None` if the name is not registered.'''
         return self._registered_names.get(name)
 
+    def resolve(self, name: str) -> Constructor:
+        '''Resolve the given (possibly qualified) name.
+
+        The name is split into parts separated by dots.
+        The leftmost (top level) name is looked up in this registry or, if it is not registered, imported as module.
+        '''
+        toplevel, *parts = name.split('.')
+        obj = self.get(toplevel)
+        if obj is None:
+            try:
+                obj = importlib.import_module(toplevel)
+            except ImportError:
+                pass
+        if obj is None:
+            return None
+        for part in parts:
+            try:
+                obj = getattr(obj, part)
+            except AttributeError:
+                return None
+        return obj
+
 
 global_registry = Registry()
 

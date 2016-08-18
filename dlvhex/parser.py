@@ -82,6 +82,8 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     semicolon = Literal(';').suppress()
     equals = Literal('=').suppress()
     amp = Literal('&').suppress()
+    slash = Literal('/').suppress()
+    rightarrow = Literal('->').suppress()
 
 
 def RawInputSpecParser():
@@ -196,14 +198,14 @@ def RawOutputSpecParser():
         index_clause = INDEX + colon + asp_variable_name('index') + semicolon
         key_clause = KEY + colon + expr('key') + semicolon
         #
-        simple_set_spec = SET + lbrace + predicate_name('predicate') + rbrace
+        simple_set_spec = SET + lbrace + predicate_name('predicate') + slash + positive_integer('arity') + Optional(rightarrow + py_qualified_identifier('constructor')) + rbrace
         set_spec = SET + lbrace + (query_clause & content_clause) + rbrace
         # TODO: add clause like "at_missing_index: skip;", "at_missing_index: 0;", "at_missing_index: None;"
         sequence_spec = SEQUENCE + lbrace + (query_clause & content_clause & index_clause) + rbrace
         dictionary_spec = DICTIONARY + lbrace + (query_clause & content_clause & key_clause) + rbrace
         expr_collection = set_spec | simple_set_spec | sequence_spec | dictionary_spec
         #
-        simple_set_spec.setParseAction(lambda t: o.ExprSimpleSet(t.predicate))
+        simple_set_spec.setParseAction(lambda t: o.ExprSimpleSet(t.predicate, t.arity, t.get('constructor')))
         set_spec.setParseAction(lambda t: o.ExprSet(t.query, t.content))
         sequence_spec.setParseAction(lambda t: o.ExprSequence(t.query, t.content, t.index))
         dictionary_spec.setParseAction(lambda t: o.ExprDictionary(t.query, t.content, t.key))

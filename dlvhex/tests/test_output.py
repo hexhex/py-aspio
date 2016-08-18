@@ -39,6 +39,32 @@ class TestOutput(unittest.TestCase):
         with self.assertRaises(AttributeError):
             result.xxx
 
+    def test_simple_set(self):
+        xs = Program(code=r'''
+            p(a). p(b). p(c).
+            %! OUTPUT { xs = set { p/1 }; }
+        ''').solve_one().xs
+        self.assertSetEqual(xs, {'a', 'b', 'c'})
+
+        xs = Program(code=r'''
+            p(a, x). p(b, y). p(c, z).
+            %! OUTPUT { xs = set { p/2 }; }
+        ''').solve_one().xs
+        self.assertSetEqual(xs, {('a', 'x'), ('b', 'y'), ('c', 'z')})
+
+        xs = Program(code=r'''
+            p(1). p(2). p(3).
+            %! OUTPUT { xs = set { p/1 -> int }; }
+        ''').solve_one().xs
+        self.assertSetEqual(xs, {1, 2, 3})
+
+        xs = Program(code=r'''
+            p("/usr", "bin"). p("/usr/local", "bin").
+            %! OUTPUT { xs = set { p/2 -> pathlib.Path }; }
+        ''').solve_one().xs
+        from pathlib import Path
+        self.assertSetEqual(xs, {Path("/usr/bin"), Path("/usr/local/bin")})
+
     def test_sequence(self):
         xs = Program(code=r'''
             p(abc, 1).
@@ -49,7 +75,7 @@ class TestOutput(unittest.TestCase):
             %!  xs = sequence { query: p(X, I); content: X; index: I; };
             %! }
         ''').solve_one().xs
-        assert xs == ['def', 'abc', 'xyz']
+        self.assertSequenceEqual(xs, ['def', 'abc', 'xyz'])
 
     def test_sequence_with_invalid_indices(self):
         # missing index
@@ -94,7 +120,7 @@ class TestOutput(unittest.TestCase):
             %!  d = dictionary { query: p(K, V); content: int(V); key: K; };
             %! }
         ''').solve_one().d
-        assert d == {'def': 0, 'abc': 1, 'xyz': 2}
+        self.assertDictEqual(dict(d), {'def': 0, 'abc': 1, 'xyz': 2})
 
     def test_dictionary_with_duplicate_keys(self):
         with self.assertRaises(DuplicateKeyError):
@@ -132,4 +158,4 @@ class TestOutput(unittest.TestCase):
         program.register('IdentityTuple', IdentityTuple)
         with program.solve().all_xs as xss:
             for xs in xss:
-                assert len(xs) == 1  # one object in the mapped 'xs' result
+                self.assertEqual(len(xs), 1)  # one object in the mapped 'xs' result

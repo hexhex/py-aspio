@@ -53,7 +53,8 @@ class TestParser(unittest.TestCase):
     def test_valid_output_spec(self):
         valid_output_specs = [
             r'OUTPUT{}',
-            r'OUTPUT{simple_nodes=set{node};}',
+            r'OUTPUT{simple_nodes=set{node/1};}',
+            r'OUTPUT{simple_nodes=set{node/1->Node};}',
             r'OUTPUT{static_object=SomeClass();}',
             r'OUTPUT{x=set{query:p("literal;with;semicolon");content:();};}',
             r'''
@@ -88,7 +89,7 @@ class TestParser(unittest.TestCase):
                     graph = mypackage.mymodule.Graph(&colored_nodes);
                     graph2 = mypackage.mymodule.Graph2(
                         set { query: vertex(X); content: (X); },
-                        set { arc },
+                        set { arc/2 },
                         mypackage.mymodule.Blah(&colored_nodes),
                         &colored_tuples,
                     );
