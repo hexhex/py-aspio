@@ -76,6 +76,8 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     rbracket = Literal(']').suppress()
     lbrace = Literal('{').suppress()
     rbrace = Literal('}').suppress()
+    langle = Literal('<').suppress()
+    rangle = Literal('>').suppress()
     dot = Literal('.').suppress()
     comma = Literal(',').suppress()
     colon = Literal(':').suppress()
@@ -143,9 +145,9 @@ def RawInputSpecParser():
         #
         predicate_spec.setParseAction(lambda t: i.Predicate(t.pred, t.args, t.iters))
 
-        # Allow optional type hints as in python3: https://www.python.org/dev/peps/pep-0484/
+        # Allow optional types, e.g., Set<Node> etc.
         input_type = Forward()
-        input_type << (Literal('...') | (py_qualified_identifier + Group(Optional(lbracket + input_type + ZeroOrMore(comma + input_type) + rbracket))))
+        input_type << (py_qualified_identifier('type_name') + Group(Optional(langle + input_type + ZeroOrMore(comma + input_type) + rangle))('type_args'))
         input_arg = Group(var('name') + Optional(colon + input_type, default=None)('type'))
         input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
 
