@@ -4,10 +4,7 @@
 %!  }
 
 %!  OUTPUT {
-%!      colored_nodes = set {
-%!          query: color(X, C);
-%!          content: ColoredNode(X, C);
-%!      };
+%!      colored_nodes = set { color/2 -> ColoredNode };
 %!  }
 
 color(X, red) v color(X, green) v color(X, blue) :- node(X).
