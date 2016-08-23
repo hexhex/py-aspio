@@ -108,20 +108,25 @@ class Program:
         if parse_io_spec:
             self.parse_spec(code)
 
-
-    def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = True, options: Optional[Iterable[str]] = None) -> 'Results':
+    def solve(self,
+              *input_arguments,
+              solver: Optional[Solver] = None,
+              capture: Optional[Iterable[str]] = None,
+              options: Optional[Iterable[str]] = None,
+              cache: bool = True) -> 'Results':
         '''Solve the ASP program with the given input arguments and return a collection of answer sets.
 
         If deterministic cleanup of the solver subprocess is required, call close() on the returned object,
         or use the returned object as a context manager in a `with` statement.
         '''
-        # TODO: Also allow to pass input arguments as keyword arguments, with names as defined in the input spec
         if solver is None:
             solver = self.solver
-        if solver is None:
-            solver = Solver()
+            if solver is None:
+                solver = Solver()
         if options is None:
             options = []
+        if capture is None:
+            capture = []
 
         def write_asp_input(text_stream: IO[str]) -> None:
             '''Write all facts and rules that are needed in addition to the original ASP code to the given stream.'''
@@ -136,18 +141,22 @@ class Program:
 
         answer_sets = solver.run(
             write_input=write_asp_input,
-            capture_predicates=self.output_spec.captured_predicates(),
+            capture_predicates=chain(self.output_spec.captured_predicates(), capture),
             file_args=self.file_parts,
             options=options
         )
         return Results(answer_sets, self.output_spec, self.local_registry, cache)
 
-    def solve_one(self, *input_arguments, solver: Optional[Solver] = None, options: Optional[Iterable[str]] = None) -> Optional['Result']:
+    def solve_one(self,
+                  *input_arguments,
+                  solver: Optional[Solver] = None,
+                  capture: Optional[Iterable[str]] = None,
+                  options: Optional[Iterable[str]] = None) -> Optional['Result']:
         '''Solve the ASP program and return one of the computed answer sets, or None if no answer set exists. No special cleanup is necessary.'''
         if options is None:
             options = []
         options = chain(options, ['--number=1'])
-        with self.solve(*input_arguments, solver=solver, cache=False, options=options) as results:
+        with self.solve(*input_arguments, solver=solver, capture=capture, options=options, cache=False) as results:
             try:
                 return next(iter(results))
             except StopIteration:
@@ -156,7 +165,7 @@ class Program:
 
 class Results(Iterable['Result']):
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
-    # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .graph iterates over answer sets, returning the "graph" object for every answer set)
+    # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .all_graph iterates over answer sets, returning the "graph" object for every answer set)
 
     def __init__(self, answer_sets: ClosableIterable[AnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
         self.output_spec = output_spec
@@ -171,13 +180,13 @@ class Results(Iterable['Result']):
     def __iter__(self) -> Iterator['Result']:
         # Make sure we can only create one results iterator if we aren't caching
         assert self.results is not None, 'Pass cache=True if you need to iterate over dlvhex results multiple times.'
-        results = self.results
+        rs = self.results
         if type(self.results) != CachingIterable:
             self.results = None
-        yield from results
+        yield from rs
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith('all_'):
+        if name.startswith('all_'):  # TODO: maybe "each_" or "every_" would read better?
             return ResultsAttributeIterator(self, name[4:])
         else:
             raise AttributeError("No attribute with name {0!r}. Prefix an output variable name with 'all_' when iterating over its values for all answer sets.".format(name))
@@ -188,29 +197,26 @@ class Results(Iterable['Result']):
     def __enter__(self) -> 'Results':
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+    def __exit__(self, exc_type, exc_value, traceback):
         self.close()
         return False
 
 
-class ResultsAttributeIterator(Iterator[Any]):
-    '''Helps with cleanup when using shortcuts.'''
+class ResultsAttributeIterator(Iterable[Any]):
+    '''Helper class to iterate over the values of the output variable with the given name for all answer sets.'''
+    # This class is required to support explicit cleanup with 'all_' shortcuts when accessing the output data.
 
-    def __init__(self, results, name):
+    def __init__(self, results: Results, name: str) -> None:
         self.results = results
-        self.results_iter = iter(results)
         self.name = name
 
-    def __iter__(self):
-        return self
+    def __iter__(self) -> Iterator[Any]:
+        return iter(getattr(r, self.name) for r in self.results)
 
-    def __next__(self):
-        return getattr(next(self.results_iter), self.name)
-
-    def close(self):
+    def close(self) -> None:
         self.results.close()
 
-    def __enter__(self):
+    def __enter__(self) -> 'ResultsAttributeIterator':
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -222,6 +228,7 @@ class Result:
     '''Represents a single answer set.'''
 
     def __init__(self, answer_set: AnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
+        self.answet_set = answer_set
         self._r = output_spec.prepare_mapping(answer_set, registry)
 
     def get(self, name: str) -> Any:
