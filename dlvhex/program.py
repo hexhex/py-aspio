@@ -1,6 +1,6 @@
 from copy import copy
 from itertools import chain
-from types import ModuleType
+from pathlib import Path
 from typing import Any, IO, Iterable, Iterator, List, Mapping, Optional, Union  # noqa
 from .helper.typing import AnswerSet, ClosableIterable
 from .solver import Solver
@@ -8,7 +8,7 @@ from .helper import CachingIterable
 from .input import InputSpec, StreamAccumulator
 from .output import UndefinedNameError, OutputSpec
 from .parser import parse_embedded_spec
-from .registry import Constructor, Registry, global_registry
+from .registry import Registry, global_registry
 
 __all__ = ['Program']
 
@@ -16,7 +16,11 @@ __all__ = ['Program']
 class Program:
     '''Represents an answer set program.'''
 
-    def __init__(self, *, filename: Optional[str] = None, code: Optional[str] = None, use_global_registry=True) -> None:
+    def __init__(self,
+                 *,
+                 filename: Optional[Union[str, Path]] = None,
+                 code: Optional[str] = None,
+                 use_global_registry: bool = True) -> None:
         '''Initialize an answer set program.
 
         For convenience, calls the appropriate `append...` method with the given `filename` and `code` keyword arguments.
@@ -27,6 +31,9 @@ class Program:
         self._output_spec = None  # type: Optional[OutputSpec]
         self.solver = None  # type: Solver
         self.local_registry = copy(global_registry) if use_global_registry else Registry()  # type: Registry
+        self.register = self.local_registry.register
+        self.register_dict = self.local_registry.register_dict
+        self.import_from_module = self.local_registry.import_from_module
         if filename is not None:
             self.append_file(filename)
         if code is not None:
@@ -79,12 +86,13 @@ class Program:
             else:
                 raise ValueError("Only one OUTPUT specification per program is allowed.")
 
-    def append_file(self, filename: str, *, parse_io_spec: bool = True) -> None:
+    def append_file(self, filename: Union[str, Path], *, parse_io_spec: bool = True) -> None:
         '''Append ASP code contained in the given file to the program.
 
         Note that unless the `parse_io_spec` argument is `False`, the file is opened immediately to extract any embedded I/O specifications.
         The file path is passed to the solver that will read the actual ASP code at the time of solving.
         '''
+        filename = str(filename)  # also support pathlib.Path instances
         self.file_parts.append(filename)
         if parse_io_spec:
             encoding = self.solver.encoding if self.solver is not None else Solver.default_encoding
@@ -100,14 +108,6 @@ class Program:
         if parse_io_spec:
             self.parse_spec(code)
 
-    def register(self, name: str, constructor: Constructor, *, replace: bool = False) -> None:
-        self.local_registry.register(name, constructor, replace=replace)
-
-    def register_dict(self, name_dict: Mapping[str, object]) -> None:
-        self.local_registry.register_dict(name_dict)
-
-    def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
-        self.local_registry.import_from_module(names, module_or_module_name, package)
 
     def solve(self, *input_arguments, solver: Optional[Solver] = None, cache: bool = True, options: Optional[Iterable[str]] = None) -> 'Results':
         '''Solve the ASP program with the given input arguments and return a collection of answer sets.
