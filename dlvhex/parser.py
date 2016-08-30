@@ -148,7 +148,7 @@ def RawInputSpecParser():
         # Allow optional types, e.g., Set<Node> etc.
         input_type = Forward()
         input_type << (py_qualified_identifier('type_name') + Group(Optional(langle + input_type + ZeroOrMore(comma + input_type) + rangle))('type_args'))
-        input_arg = Group(var('name') + Optional(colon + input_type, default=None)('type'))
+        input_arg = Group((input_type('type') + var('name')) | var('name'))
         input_args = Group(Optional(input_arg + ZeroOrMore(comma + input_arg) + Optional(comma)))
 
         input_statement = INPUT + lpar + input_args('args') + rpar + lbrace + predicate_specs('preds') + rbrace

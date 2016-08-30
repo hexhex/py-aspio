@@ -8,6 +8,8 @@ class TestParser(unittest.TestCase):
         valid_input_specs = [
             r'INPUT(){}',
             r'INPUT(x){}',
+            r'INPUT(mypackage.mymodule.MyClass x){}',
+            r'INPUT(Set<Node> x, Tuple<int, str, mymodule.MyClass, Set<int>> y){}',
             r'INPUT(){p();}',
             r'''
                 INPUT (
