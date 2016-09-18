@@ -4,7 +4,7 @@ import unittest
 import warnings
 import weakref
 from ..program import Program
-from ..solver import SolverError
+from ..errors import SolverError
 
 
 class TestSolver(unittest.TestCase):

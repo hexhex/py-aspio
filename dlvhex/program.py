@@ -3,7 +3,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, IO, Iterable, Iterator, List, Mapping, Optional, Union  # noqa
 from .helper.typing import AnswerSet, ClosableIterable
-from .solver import Solver
+from .solver import Solver, DefaultSolver
 from .helper import CachingIterable
 from .input import InputSpec, StreamAccumulator
 from .output import UndefinedNameError, OutputSpec
@@ -86,16 +86,16 @@ class Program:
             else:
                 raise ValueError("Only one OUTPUT specification per program is allowed.")
 
-    def append_file(self, filename: Union[str, Path], *, parse_io_spec: bool = True) -> None:
+    def append_file(self, filename: Union[str, Path], *, parse_io_spec: bool = True, encoding: str = 'UTF-8') -> None:
         '''Append ASP code contained in the given file to the program.
 
         Note that unless the `parse_io_spec` argument is `False`, the file is opened immediately to extract any embedded I/O specifications.
         The file path is passed to the solver that will read the actual ASP code at the time of solving.
         '''
         filename = str(filename)  # also support pathlib.Path instances
+        # TODO: If the encoding differs from what the solver expects, we should just read the file and append it to the code parts
         self.file_parts.append(filename)
         if parse_io_spec:
-            encoding = self.solver.encoding if self.solver is not None else Solver.default_encoding
             with open(filename, 'rt', encoding=encoding) as file:
                 self.parse_spec(file.read())
 
@@ -122,11 +122,11 @@ class Program:
         if solver is None:
             solver = self.solver
             if solver is None:
-                solver = Solver()
+                solver = DefaultSolver()
         if options is None:
-            options = []
+            options = ()
         if capture is None:
-            capture = []
+            capture = ()
 
         def write_asp_input(text_stream: IO[str]) -> None:
             '''Write all facts and rules that are needed in addition to the original ASP code to the given stream.'''
@@ -154,7 +154,7 @@ class Program:
                   options: Optional[Iterable[str]] = None) -> Optional['Result']:
         '''Solve the ASP program and return one of the computed answer sets, or None if no answer set exists. No special cleanup is necessary.'''
         if options is None:
-            options = []
+            options = ()
         options = chain(options, ['--number=1'])
         with self.solve(*input_arguments, solver=solver, capture=capture, options=options, cache=False) as results:
             try:
@@ -166,6 +166,7 @@ class Program:
 class Results(Iterable['Result']):
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .all_graph iterates over answer sets, returning the "graph" object for every answer set)
+    # TODO: Should support async/await
 
     def __init__(self, answer_sets: ClosableIterable[AnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
         self.output_spec = output_spec
@@ -228,7 +229,7 @@ class Result:
     '''Represents a single answer set.'''
 
     def __init__(self, answer_set: AnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
-        self.answet_set = answer_set
+        self.answer_set = answer_set
         self._r = output_spec.prepare_mapping(answer_set, registry)
 
     def get(self, name: str) -> Any:

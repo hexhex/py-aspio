@@ -70,6 +70,7 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     py_identifier = Word(alphas + '_', alphanums + '_').setName('python identifier')
     py_qualified_identifier = Word(alphas + '_', alphanums + '_.').setName('qualified python identifier')
     integer = (Optional('-') + Word(nums)).setName('integer').setParseAction(lambda t: int(t[0]))
+    positive_integer = Word(nums).setName('integer').setParseAction(lambda t: int(t[0]))
     lpar = Literal('(').suppress()
     rpar = Literal(')').suppress()
     lbracket = Literal('[').suppress()

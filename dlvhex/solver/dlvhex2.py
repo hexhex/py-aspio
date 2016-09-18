@@ -3,17 +3,14 @@ import signal
 import subprocess  # type: ignore
 import weakref
 from typing import Callable, IO, Iterable, Iterator
-from .helper.typing import AnswerSet, ClosableIterable
-from .errors import SolverError, SolverSubprocessError
-from .helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
-from .parser import parse_answer_set, ParseException
-
-__all__ = [
-    'Solver',
-]
+from ..helper.typing import AnswerSet, ClosableIterable
+from ..errors import SolverError, SolverSubprocessError
+from ..helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
+from ..parser import parse_answer_set, ParseException
+from .solver import Solver
 
 
-class Solver:
+class Dlvhex2Solver(Solver):
     '''Interface to the dlvhex2 solver.'''
 
     # TODO: Check what encoding dlvhex2 expects (on stdin and for input files) -- this is not supposed to be an option, but the encoding that dlvhex2 uses to read from stdin (and input files)
@@ -25,7 +22,13 @@ class Solver:
         @param executable The path to the dlvhex2 executable. If not specified, looks for "dlvhex2" in the current $PATH.
         '''
         self.executable = executable if executable is not None else 'dlvhex2'
-        self.encoding = Solver.default_encoding
+        self.encoding = type(self).default_encoding
+
+    def __copy__(self) -> 'Solver':
+        other = Dlvhex2Solver()
+        other.executable = self.executable
+        other.encoding = self.encoding
+        return other
 
     def run(self, *,
             write_input: Callable[[IO[str]], None],
@@ -45,6 +48,7 @@ class Solver:
                 # only print the answer sets themselves
                 '--silent',
                 # only capture relevant predicates
+                # TODO: possibility to capture everything (i.e., skip this option)
                 '--filter=' + ','.join(capture_predicates),
                 # wait for a newline on stdin between answer sets
                 '--waitonmodel',
@@ -69,7 +73,8 @@ class Solver:
             )
 
             try:
-                # If we have a named pipe, we must pass the data after starting the subprocess, or we risk a deadlock by filling the pipe's buffer
+                # If we have a named pipe, we must pass the data after starting the subprocess,
+                # or we risk a deadlock by filling the pipe's buffer
                 if isinstance(tmp_input, TemporaryNamedPipe):
                     with open(tmp_input.name, 'wt', encoding=self.encoding) as stream:
                         write_input(stream)
@@ -185,7 +190,17 @@ class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
     def __init__(self, lines: ClosableIterable[str]) -> None:
         self.lines = lines
 
+    # @staticmethod
+    # def _parse(line):
+    #     try:
+    #         return parse_answer_set(line)
+    #     except ParseException:
+    #         e = SolverError('Unable to parse answer set received from solver')
+    #         e.line = line  # type: ignore
+    #         raise e
+
     def __iter__(self) -> Iterator[AnswerSet]:
+        # return iter(map(type(self)._parse, self.lines))
         for line in self.lines:
             try:
                 yield parse_answer_set(line)
@@ -194,5 +209,5 @@ class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
                 e.line = line  # type: ignore
                 raise e
 
-    def close(self):
+    def close(self) -> None:
         self.lines.close()

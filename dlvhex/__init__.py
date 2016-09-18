@@ -1,15 +1,16 @@
 import logging
-from .errors import CircularReferenceError, InvalidIndicesError, RedefinedNameError, UndefinedNameError
+from .errors import CircularReferenceError, InvalidIndicesError, RedefinedNameError, SolverError, UndefinedNameError
 from .input import InputSpec
 from .output import OutputSpec
 from .program import Program
 from .registry import register, register_dict, import_from_module
-from .solver import Solver, SolverError
+from .solver import Solver
 
 __all__ = [
     'CircularReferenceError',
     'InvalidIndicesError',
     'RedefinedNameError',
+    'SolverError',
     'UndefinedNameError',
     #
     'InputSpec',
@@ -23,7 +24,6 @@ __all__ = [
     'import_from_module',
     #
     'Solver',
-    'SolverError',
 ]
 
 # Set up logging. By default, do not output any log messages from library code.
