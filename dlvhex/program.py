@@ -1,11 +1,10 @@
 import logging
 import numbers
 from copy import copy
-from itertools import chain
 from pathlib import Path
 from typing import Any, IO, Iterable, Iterator, List, Mapping, Optional, Sequence, Union  # noqa
 from .helper.typing import ClosableIterable
-from .solver import Solver, DefaultSolver
+from .solver import DefaultSolver, Solver, SolverOptions
 from .helper import CachingIterable
 from .input import InputSpec, FactAccumulator
 from .output import UndefinedNameError, OutputSpec
@@ -140,8 +139,7 @@ class Program:
     def solve(self,
               *input_arguments,
               solver: Optional[Solver] = None,
-              capture: Optional[Iterable[str]] = None,
-              options: Optional[Iterable[str]] = None,
+              options: Optional[SolverOptions] = None,
               cache: bool = True) -> 'Results':
         '''Solve the ASP program with the given input arguments and return a collection of answer sets.
 
@@ -152,10 +150,6 @@ class Program:
             solver = self.solver
             if solver is None:
                 solver = DefaultSolver()
-        if options is None:
-            options = ()
-        if capture is None:
-            capture = ()
 
         def write_asp_input(text_stream: IO[str]) -> None:
             '''Write all facts and rules that are needed in addition to the original ASP code to the given stream.'''
@@ -167,14 +161,13 @@ class Program:
                 log.debug('Program: Adding helper rule %r', rule)
                 text_stream.write(str(rule))
                 text_stream.write('\n')
-            # text_stream.write('\n'.join(str(rule) for rule in self.output_spec.additional_rules()))
             # Pass code given as string over stdin
             for code in self.code_parts:
                 text_stream.write(code)
 
         answer_sets = solver.run(
             write_input=write_asp_input,
-            capture_predicates=chain(self.output_spec.captured_predicates(), capture),
+            capture_predicates=self.output_spec.captured_predicates(),
             file_args=self.file_parts,
             options=options
         )
@@ -183,13 +176,11 @@ class Program:
     def solve_one(self,
                   *input_arguments,
                   solver: Optional[Solver] = None,
-                  capture: Optional[Iterable[str]] = None,
-                  options: Optional[Iterable[str]] = None) -> Optional['Result']:
+                  options: Optional[SolverOptions] = None) -> Optional['Result']:
         '''Solve the ASP program and return one of the computed answer sets, or None if no answer set exists. No special cleanup is necessary.'''
-        if options is None:
-            options = ()
-        options = chain(options, ['--number=1'])
-        with self.solve(*input_arguments, solver=solver, capture=capture, options=options, cache=False) as results:
+        options = SolverOptions() if options is None else copy(options)
+        options.max_answer_sets = 1
+        with self.solve(*input_arguments, solver=solver, options=options, cache=False) as results:
             try:
                 return next(iter(results))
             except StopIteration:

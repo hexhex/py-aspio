@@ -2,12 +2,13 @@ import io
 import signal
 import subprocess  # type: ignore
 import weakref
-from typing import Callable, IO, Iterable, Iterator
+from itertools import chain
+from typing import Callable, IO, Iterable, Iterator, Optional
 from ..helper.typing import ClosableIterable
 from ..errors import SolverError, SolverSubprocessError
 from ..helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
 from ..parser import parse_answer_set, ParseException
-from .solver import Solver
+from .solver import Solver, SolverOptions
 from .. import asp
 
 
@@ -35,7 +36,7 @@ class Dlvhex2Solver(Solver):
             write_input: Callable[[IO[str]], None],
             capture_predicates: Iterable[str],
             file_args: Iterable[str],
-            options: Iterable[str]) -> ClosableIterable[asp.RawAnswerSet]:
+            options: Optional[SolverOptions]) -> ClosableIterable[asp.RawAnswerSet]:
         '''Run the dlvhex solver on the given program.'''
         # Prefer named pipes, but fall back to a file if pipes are not implemented for the current platform
         try:
@@ -43,19 +44,27 @@ class Dlvhex2Solver(Solver):
         except NotImplementedError:
             tmp_input = TemporaryFile()
 
+        if options is not None and options.capture is not None:
+            capture_predicates = chain(capture_predicates, options.capture)
+
         try:
             args = [
                 self.executable,
                 # only print the answer sets themselves
                 '--silent',
                 # only capture relevant predicates
-                # TODO: possibility to capture everything (i.e., skip this option)
                 '--filter=' + ','.join(capture_predicates),
                 # wait for a newline on stdin between answer sets
                 '--waitonmodel',
             ]
             # options passed in by caller
-            args.extend(options)
+            if options is not None:
+                if options.max_answer_sets is not None:
+                    args.append('--number={0!s}'.format(options.max_answer_sets))
+                if options.max_int is not None:
+                    args.append('--maxint={0!s}'.format(options.max_int))
+                if options.custom is not None:
+                    args.extend(options.custom)
             # tell dlvhex2 to read our input from the named pipe
             args.append(tmp_input.name)
             args.extend(file_args)

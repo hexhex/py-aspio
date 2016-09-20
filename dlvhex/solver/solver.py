@@ -1,27 +1,38 @@
 from abc import ABC, abstractmethod
-from typing import Callable, IO, Iterable
+from copy import copy
+from typing import Callable, IO, Iterable, Optional, Sequence  # noqa
 from ..helper.typing import ClosableIterable
 from .. import asp
 
 __all__ = [
     'Solver',
+    'SolverOptions',
 ]
 
 
 class SolverOptions:
-    # TODO: Abstract some common options over different solvers
-    # maxint, evtl. maxmodels
-    # but also provide a field for custom options, could be e.g. a List[str]
-    # also incorporate the "capture" option here?
-    def __init__(self) -> None:
-        self.maxmodels = None  # type: int TODO rename
-        self.maxint = None  # type: int
-        self.custom = None  # type: List[str]
-        # TODO: Add a "timeout" options? => creates a watchdog thread that just kills the solver after the time elapses (prompting a SolverTimeoutExpired exception or something like that.)
-        pass
+    def __init__(self, *,
+                 max_answer_sets: Optional[int] = None,
+                 max_int: Optional[int] = None,
+                 capture: Optional[Iterable[str]] = None,
+                 custom: Optional[Sequence[str]] = None) -> None:
+        self.max_answer_sets = max_answer_sets
+        '''Instruct the solver to compute at most `max_answer_sets` answer sets. Compute all answer sets if `None`.'''
+        self.max_int = max_int
+        '''Set maximum integer value.'''
+        self.capture = capture
+        '''Capture additional predicates if they are to be examined manually.'''
+        # TODO: Provide some "sentinel" value for the capture options that just means "capture everything"
+        self.custom = custom
+        '''Custom solver options, passed to the solver as-is'''
+        # TODO: Add a "timeout" option? => creates a watchdog thread that just kills the solver after the time elapses (prompting a SolverTimeoutExpired exception or something like that.)
 
     def __copy__(self) -> 'SolverOptions':
-        pass
+        return SolverOptions(
+            max_answer_sets=self.max_answer_sets,
+            max_int=self.max_int,
+            capture=copy(self.capture),
+            custom=copy(self.custom))
 
 
 class Solver(ABC):
