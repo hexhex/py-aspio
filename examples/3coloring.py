@@ -43,6 +43,7 @@ def main():
     result = prog.solve_one(nodes, arcs)
     if result is not None:
         print(result.colored_nodes)
+        print(result.labels_by_color)
     else:
         print('no answer set')
 

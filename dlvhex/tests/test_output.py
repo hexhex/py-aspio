@@ -6,18 +6,20 @@ from ..errors import CircularReferenceError, DuplicateKeyError, InvalidIndicesEr
 
 class TestOutput(unittest.TestCase):
 
-    def test_do_not_leak_variables(self):
-        # not sure what it should raise, but it must be an error
-        # (currently AssertionError while mapping, later an UndefinedNameError would be better at parsing time)
-        with self.assertRaises(BaseException):
-            result = Program(code=r'''
-                %! OUTPUT {
-                %!  a = (X);
-                %!  b = set { query: p(X); content: (X, &a); };
-                %! }
-                p(1). p(2).
-                ''').solve_one()
-            result.get('b')
+    def test_undefined_variables(self):
+        with self.assertRaises(UndefinedNameError):
+            OutputSpec.parse(r'''
+                OUTPUT {
+                    a = (X);
+                    b = set { query: p(X); content: (X, &a); };
+                }
+            ''')
+        with self.assertRaises(UndefinedNameError):
+            OutputSpec.parse(r'''
+                OUTPUT {
+                    b = set { query: p(X); content: (X, int(Y)); };
+                }
+            ''')
 
     def test_cycle_detection(self):
         spec = OutputSpec.parse(r'''
@@ -150,12 +152,40 @@ class TestOutput(unittest.TestCase):
             %!  % Here, we only extract the first argument.
             %!  % Since it is the same in all three p-facts, we will get only one result object.
             %!  % We use IdentityTuple to make sure the deduplication is not performed after the mapping by the 'set' container.
-            %!  xs = set { query: p(X, Y); content: IdentityTuple(X); };
+            %!  xs = set { query: p(X, _); content: IdentityTuple(X); };
             %! }
         ''')
-        # TODO: Are these the semantics we want?
-        # Maybe we should use all referenced variables in the rule head, except if suppressed (variable name '_' for unused arguments, like in ASP)
-        program.register('IdentityTuple', IdentityTuple)
+        program.register(IdentityTuple)
         with program.solve().all_xs as xss:
             for xs in xss:
                 self.assertEqual(len(xs), 1)  # one object in the mapped 'xs' result
+
+    def test_query_constants(self):
+        result = Program(code=r'''
+            p(a, 1). p(a, 2).
+            p("a", 3).
+            p(5, 6).
+            %!  OUTPUT {
+            %!      x = set { query: p(a, X); content: int(X); };
+            %!      y = set { query: p("a", X); content: int(X); };
+            %!      z = set { query: p(5, X); content: int(X); };
+            %!  }
+        ''').solve_one()
+        self.assertSetEqual(result.x, {1, 2})
+        self.assertSetEqual(result.y, {3})
+        self.assertSetEqual(result.z, {6})
+
+    def test_nested_container(self):
+        d = Program(code=r'''
+            p(a, 1). p(a, 2).
+            p(c, 3).
+
+            %! OUTPUT {
+            %!  d = dictionary {
+            %!          query: p(K, _);
+            %!          key: K;
+            %!          content: set { query: p(K, V); content: int(V); };
+            %!      };
+            %! }
+        ''').solve_one().d
+        self.assertDictEqual(dict(d), {'a': {1, 2}, 'c': {3}})

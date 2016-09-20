@@ -1,56 +1,18 @@
 import collections
 import enum
-import logging
-import numbers
 from abc import ABCMeta, abstractmethod
-from typing import Iterable, Any, Union, Dict, IO, Iterator, MutableSet, Sequence, AbstractSet
+from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet
 from . import parser
 from .errors import RedefinedNameError, UndefinedNameError
-
-log = logging.getLogger(__name__)
 
 Context = Dict['Variable', Any]
 
 
+# Maybe have perform_mapping return a Generator (with "yield Fact(pred, args)" or some such) instead of using FactAccumulator instances.
 class FactAccumulator(metaclass=ABCMeta):
     @abstractmethod
     def add_fact(self, predicate: str, args: Sequence[Any]) -> None:
         pass
-
-
-class StreamAccumulator(FactAccumulator):
-    def __init__(self, output_stream: IO[str]) -> None:
-        if not output_stream.writable:
-            raise ValueError('output_stream must be writable')
-        self._stream = output_stream
-
-    def quote(self, arg: Any) -> str:
-        '''Enclose the given argument in double quotes, escaping any contained quotes and backslashes with a backslash.'''
-        return '"' + str(arg).replace('\\', '\\\\').replace('\"', '\\\"') + '"'
-
-    def arg_str(self, arg: Any) -> str:
-        '''Convert the given argument to a string suitable to be passed to dlvhex.'''
-        if isinstance(arg, numbers.Integral):
-            # Output integers without quotes (so we can use them for arithmetic in dlvhex)
-            return str(arg)
-        else:
-            # Everything else is converted to a string and quoted unconditionally
-            return self.quote(arg)
-
-    def add_fact(self, predicate: str, args: Sequence[Any]) -> None:
-        '''Writes a fact to the output stream, in the usual ASP syntax: predicate(arg1, arg2, arg3).'''
-        # assert isinstance(predicate, str)
-        assert len(predicate) > 0
-        self._stream.write(predicate)
-        self._stream.write('(')
-        for (idx, arg) in enumerate(args):
-            if idx > 0:
-                self._stream.write(',')
-            self._stream.write(self.arg_str(arg))
-        self._stream.write(').\n')
-        if log.isEnabledFor(logging.DEBUG):  # type: ignore
-            fact = predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')'
-            log.debug('StreamAccumulator: Adding fact for predicate %r with args %r:\t=> %s', predicate, args, fact)
 
 
 class AssignmentTarget(metaclass=ABCMeta):
@@ -283,7 +245,7 @@ class InputSpec:
 
     @staticmethod
     def empty() -> 'InputSpec':
-        return InputSpec([], [])
+        return InputSpec((), ())
 
     @staticmethod
     def parse(string: str) -> 'InputSpec':

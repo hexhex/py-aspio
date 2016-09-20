@@ -3,11 +3,12 @@ import signal
 import subprocess  # type: ignore
 import weakref
 from typing import Callable, IO, Iterable, Iterator
-from ..helper.typing import AnswerSet, ClosableIterable
+from ..helper.typing import ClosableIterable
 from ..errors import SolverError, SolverSubprocessError
 from ..helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
 from ..parser import parse_answer_set, ParseException
 from .solver import Solver
+from .. import asp
 
 
 class Dlvhex2Solver(Solver):
@@ -34,7 +35,7 @@ class Dlvhex2Solver(Solver):
             write_input: Callable[[IO[str]], None],
             capture_predicates: Iterable[str],
             file_args: Iterable[str],
-            options: Iterable[str]) -> ClosableIterable[AnswerSet]:
+            options: Iterable[str]) -> ClosableIterable[asp.RawAnswerSet]:
         '''Run the dlvhex solver on the given program.'''
         # Prefer named pipes, but fall back to a file if pipes are not implemented for the current platform
         try:
@@ -186,7 +187,7 @@ class DlvhexLineReader(ClosableIterable[str]):
             raise err
 
 
-class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
+class AnswerSetParserIterable(ClosableIterable[asp.RawAnswerSet]):
     def __init__(self, lines: ClosableIterable[str]) -> None:
         self.lines = lines
 
@@ -199,7 +200,7 @@ class AnswerSetParserIterable(ClosableIterable[AnswerSet]):
     #         e.line = line  # type: ignore
     #         raise e
 
-    def __iter__(self) -> Iterator[AnswerSet]:
+    def __iter__(self) -> Iterator[asp.RawAnswerSet]:
         # return iter(map(type(self)._parse, self.lines))
         for line in self.lines:
             try:

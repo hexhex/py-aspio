@@ -1,16 +1,21 @@
+import logging
+import numbers
 from copy import copy
 from itertools import chain
 from pathlib import Path
-from typing import Any, IO, Iterable, Iterator, List, Mapping, Optional, Union  # noqa
-from .helper.typing import AnswerSet, ClosableIterable
+from typing import Any, IO, Iterable, Iterator, List, Mapping, Optional, Sequence, Union  # noqa
+from .helper.typing import ClosableIterable
 from .solver import Solver, DefaultSolver
 from .helper import CachingIterable
-from .input import InputSpec, StreamAccumulator
+from .input import InputSpec, FactAccumulator
 from .output import UndefinedNameError, OutputSpec
 from .parser import parse_embedded_spec
 from .registry import Registry, global_registry
+from . import asp
 
 __all__ = ['Program']
+
+log = logging.getLogger(__name__)
 
 
 class Program:
@@ -31,13 +36,37 @@ class Program:
         self._output_spec = None  # type: Optional[OutputSpec]
         self.solver = None  # type: Solver
         self.local_registry = copy(global_registry) if use_global_registry else Registry()  # type: Registry
-        self.register = self.local_registry.register
-        self.register_dict = self.local_registry.register_dict
-        self.import_from_module = self.local_registry.import_from_module
+        # self.register = self.local_registry.register
+        # self.register_dict = self.local_registry.register_dict
+        # self.import_from_module = self.local_registry.import_from_module
         if filename is not None:
             self.append_file(filename)
         if code is not None:
             self.append_code(code)
+
+    def __copy__(self) -> 'Program':
+        other = Program()
+        other.file_parts = copy(self.file_parts)
+        other.code_parts = copy(self.code_parts)
+        other._input_spec = copy(self._input_spec)
+        other._output_spec = copy(self._output_spec)
+        other.solver = copy(self.solver)
+        other.local_registry = copy(self.local_registry)
+        # other.register = other.local_registry.register
+        # other.register_dict = other.local_registry.register_dict
+        # other.import_from_module = other.local_registry.import_from_module
+        return other
+
+    @property
+    def local_registry(self):
+        return self._local_registry
+
+    @local_registry.setter
+    def local_registry(self, value):
+        self._local_registry = value
+        self.register = self._local_registry.register
+        self.register_dict = self._local_registry.register_dict
+        self.import_from_module = self._local_registry.import_from_module
 
     @property
     def input_spec(self):
@@ -134,7 +163,11 @@ class Program:
             # Raises exception if the input arguments are not as expected (e.g., wrong count, an attribute does not exist, ...)
             self.input_spec.perform_mapping(input_arguments, StreamAccumulator(text_stream))
             # Additional rules required for output mapping
-            text_stream.write('\n'.join(str(rule) for rule in self.output_spec.additional_rules()))
+            for rule in self.output_spec.additional_rules():
+                log.debug('Program: Adding helper rule %r', rule)
+                text_stream.write(str(rule))
+                text_stream.write('\n')
+            # text_stream.write('\n'.join(str(rule) for rule in self.output_spec.additional_rules()))
             # Pass code given as string over stdin
             for code in self.code_parts:
                 text_stream.write(code)
@@ -163,12 +196,42 @@ class Program:
                 return None
 
 
+class StreamAccumulator(FactAccumulator):
+    def __init__(self, output_stream: IO[str]) -> None:
+        if not output_stream.writable:
+            raise ValueError('output_stream must be writable')
+        self._stream = output_stream
+
+    def arg_str(self, arg: Any) -> str:
+        '''Convert the given argument to a string suitable to be passed to dlvhex.'''
+        if isinstance(arg, numbers.Integral):
+            # Output integers without quotes (so we can use them for arithmetic in ASP)
+            return str(arg)
+        else:
+            # Everything else is converted to a string and quoted unconditionally
+            return asp.quote(arg)
+
+    def add_fact(self, predicate: str, args: Sequence[Any]) -> None:
+        '''Writes a fact to the output stream, in the usual ASP syntax: predicate(arg1, arg2, arg3).'''
+        assert len(predicate) > 0
+        self._stream.write(predicate)
+        self._stream.write('(')
+        for (idx, arg) in enumerate(args):
+            if idx > 0:
+                self._stream.write(',')
+            self._stream.write(self.arg_str(arg))
+        self._stream.write(').\n')
+        if log.isEnabledFor(logging.DEBUG):  # type: ignore
+            fact = predicate + '(' + ', '.join(self.arg_str(x) for x in args) + ')'
+            log.debug('StreamAccumulator: Adding fact for predicate %r with args %r:\t=> %s', predicate, args, fact)
+
+
 class Results(Iterable['Result']):
     '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .all_graph iterates over answer sets, returning the "graph" object for every answer set)
     # TODO: Should support async/await
 
-    def __init__(self, answer_sets: ClosableIterable[AnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
+    def __init__(self, answer_sets: ClosableIterable[asp.RawAnswerSet], output_spec: OutputSpec, registry: Registry, cache: bool) -> None:
         self.output_spec = output_spec
         self.registry = registry
         self.answer_sets = answer_sets
@@ -185,6 +248,16 @@ class Results(Iterable['Result']):
         if type(self.results) != CachingIterable:
             self.results = None
         yield from rs
+
+    def __bool__(self) -> bool:
+        # TODO: Handle case when cache=False
+        # if not self.cache:
+        #     raise NotImplementedError('Because cache=False, only (one) iteration is supported.')
+        try:
+            next(iter(self))
+            return True
+        except StopIteration:
+            return False
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith('all_'):  # TODO: maybe "each_" or "every_" would read better?
@@ -228,7 +301,7 @@ class ResultsAttributeIterator(Iterable[Any]):
 class Result:
     '''Represents a single answer set.'''
 
-    def __init__(self, answer_set: AnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
+    def __init__(self, answer_set: asp.RawAnswerSet, output_spec: OutputSpec, registry: Registry) -> None:
         self.answer_set = answer_set
         self._r = output_spec.prepare_mapping(answer_set, registry)
 

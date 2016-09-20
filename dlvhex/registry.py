@@ -2,7 +2,7 @@ import importlib
 import logging
 from copy import copy
 from types import ModuleType
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, Union  # noqa
+from typing import Any, AbstractSet, Callable, Iterable, Mapping, MutableMapping, Optional, Sequence, Union  # noqa
 
 __all__ = [
     'Constructor',
@@ -19,22 +19,40 @@ Constructor = Callable[..., object]
 
 
 class Registry:
+    # Default constructors for collections (global setting)
+    tuple_constructor = tuple  # type: Callable[[Iterable[Any]], object]
+    set_constructor = frozenset  # type: Callable[[Iterable[Any]], AbstractSet[Any]]
+    sequence_constructor = list  # type: Callable[[Iterable[Any]], Sequence[Any]]
+    dictionary_constructor = dict  # type: Callable[[Mapping[Any, Any]], Mapping[Any, Any]]
+
     def __init__(self) -> None:
         self._registered_names = {
             'int': int  # 'int' constructor must be available as per the language specification
         }  # type: MutableMapping[str, Constructor]
+        # Default constructors for collections (local setting)
+        self.tuple_constructor = type(self).tuple_constructor  # type: ignore  # bug in mypy: https://github.com/python/mypy/issues/708
+        self.set_constructor = type(self).set_constructor  # type: ignore
+        self.sequence_constructor = type(self).sequence_constructor  # type: ignore
+        self.dictionary_constructor = type(self).dictionary_constructor  # type: ignore
 
     def __copy__(self) -> 'Registry':
         other = Registry()
         other._registered_names = copy(self._registered_names)
         return other
 
-    def register(self, name: str, constructor: Constructor, *, replace: bool = False) -> None:
+    def register(self, constructor: Constructor, name: str = None, *, replace: bool = False) -> None:
         '''Register the given constructor with the given name.
+
+        If `name` is not given, it defaults to `constructor.__name__` (raising a `ValueError` if this attribute does not exist).
 
         Raises a `ValueError` when trying to re-register a name with a different constructor (unless `replace` is `True`).
         Raises a `ValueError` when the constructor argument is not callable.
         '''
+        if name is None:
+            try:
+                name = constructor.__name__
+            except AttributeError:
+                raise ValueError("Constructor {0!r} has no attribute '__name__'. Please provide the name argument manually.".format(constructor))
         if not replace and name in self._registered_names:
             if self._registered_names[name] is constructor:
                 # If we try to register the same object again, there is no problem.
@@ -59,7 +77,7 @@ class Registry:
             if name.startswith('__') and name.endswith('__'):
                 continue
             if callable(obj):
-                self.register(name, obj)
+                self.register(obj, name)
 
     def import_from_module(self, names: Iterable[str], module_or_module_name: Union[ModuleType, str], package: Optional[str] = None) -> None:
         '''Import names from the given module.
@@ -73,7 +91,7 @@ class Registry:
         else:
             module = importlib.import_module(module_or_module_name, package=package)
         for name in names:
-            self.register(name, getattr(module, name))
+            self.register(getattr(module, name), name)
 
     def get(self, name: str) -> Constructor:
         '''Return the constructor registered to `name`, or `None` if the name is not registered.'''
@@ -86,7 +104,7 @@ class Registry:
         The leftmost (top level) name is looked up in this registry or, if it is not registered, imported as module.
         '''
         toplevel, *parts = name.split('.')
-        obj = self.get(toplevel)
+        obj = self.get(toplevel)  # type: Any
         if obj is None:
             try:
                 obj = importlib.import_module(toplevel)
@@ -99,7 +117,10 @@ class Registry:
                 obj = getattr(obj, part)
             except AttributeError:
                 return None
-        return obj
+        if callable(obj):
+            return obj
+        else:
+            return None
 
 
 global_registry = Registry()

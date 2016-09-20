@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, IO, Iterable
-from ..helper.typing import AnswerSet, ClosableIterable
+from ..helper.typing import ClosableIterable
+from .. import asp
 
 __all__ = [
     'Solver',
@@ -16,6 +17,7 @@ class SolverOptions:
         self.maxmodels = None  # type: int TODO rename
         self.maxint = None  # type: int
         self.custom = None  # type: List[str]
+        # TODO: Add a "timeout" options? => creates a watchdog thread that just kills the solver after the time elapses (prompting a SolverTimeoutExpired exception or something like that.)
         pass
 
     def __copy__(self) -> 'SolverOptions':
@@ -30,7 +32,7 @@ class Solver(ABC):
             write_input: Callable[[IO[str]], None],
             capture_predicates: Iterable[str],
             file_args: Iterable[str],
-            options: SolverOptions = None) -> ClosableIterable[AnswerSet]:
+            options: SolverOptions = None) -> ClosableIterable[asp.RawAnswerSet]:
         pass
 
     @abstractmethod

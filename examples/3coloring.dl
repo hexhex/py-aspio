@@ -5,6 +5,11 @@
 
 %!  OUTPUT {
 %!      colored_nodes = set { color/2 -> ColoredNode };
+%!      labels_by_color = dictionary {
+%!          query: color(_,C);
+%!          key: C;
+%!          content: set { query: color(X,C); content: X; };
+%!      };
 %!  }
 
 color(X, red) v color(X, green) v color(X, blue) :- node(X).

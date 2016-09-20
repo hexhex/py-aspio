@@ -1,7 +1,7 @@
 import unittest
 from collections import defaultdict
 from io import StringIO
-from ..input import InputSpec, FactAccumulator, StreamAccumulator
+from ..input import InputSpec, FactAccumulator
 
 
 class TestAccumulator(FactAccumulator):
@@ -59,13 +59,3 @@ class TestInput(unittest.TestCase):
             }
         ''')
         # TODO
-
-    def test_stream_accumulator(self):
-        def sa_map(pred, args):
-            s = StringIO()
-            acc = StreamAccumulator(s)
-            acc.add_fact(pred, args)
-            return s.getvalue().strip()
-        self.assertEqual(sa_map('pred', tuple()), 'pred().')
-        self.assertEqual(sa_map('p', ("abc",)), 'p("abc").')
-        self.assertEqual(sa_map('p', (1, 2, 'xy"z', 3)), r'p(1,2,"xy\"z",3).')

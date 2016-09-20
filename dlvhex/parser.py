@@ -1,19 +1,17 @@
 import re
 from contextlib import contextmanager
+from typing import MutableMapping  # noqa
 from pyparsing import (  # type: ignore
     alphas,
     alphanums,
     nums,
-    originalTextFor,
     restOfLine,
     srange,
     CaselessKeyword,
-    CharsNotIn,
     Forward,
     Group,
     Keyword,
     Literal,
-    OneOrMore,
     Optional,
     ParseException,
     ParserElement,
@@ -21,8 +19,7 @@ from pyparsing import (  # type: ignore
     Word,
     ZeroOrMore,
 )
-from typing import MutableMapping  # noqa
-from .helper.typing import AnswerSet, FactArgumentTuple  # noqa
+from . import asp
 from . import input as i
 from . import output as o
 
@@ -87,6 +84,11 @@ with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     amp = Literal('&').suppress()
     slash = Literal('/').suppress()
     rightarrow = Literal('->').suppress()
+
+# TODO
+# Improve error messages of all parsers!
+# See http://blog.ezyang.com/2014/05/parsec-try-a-or-b-considered-harmful/ and check how much of that applies here.
+# Also: http://stackoverflow.com/questions/33708817/parser-errors-pattern-for-generating-error-handling-automatically (-> "PEG" parser?)
 
 
 def RawInputSpecParser():
@@ -175,14 +177,19 @@ def RawOutputSpecParser():
         SET = CaselessKeyword('set').suppress()
         SEQUENCE = CaselessKeyword('sequence').suppress()
         DICTIONARY = CaselessKeyword('dictionary').suppress()
+        NOT = CaselessKeyword('not').suppress()
 
-        literal = integer | QuotedString('"', escChar='\\')
-        literal.setParseAction(lambda t: o.Literal(t[0]))  # not strictly necessary to wrap this, but it simplifies working with the syntax tree
+        constant = integer | QuotedString('"', escChar='\\')
+        constant.setParseAction(lambda t: o.Constant(t[0]))  # not strictly necessary to wrap this, but it simplifies working with the syntax tree
 
         asp_variable_name = Word(alphas_uppercase, alphanums + '_')
-        # asp_variable_anonymous = Literal('_')
-        # asp_variable = asp_variable_anonymous | asp_variable_name
-        asp_variable_name.setParseAction(lambda t: o.Variable(t[0]))  # to distinguish variable names from literal string values
+        asp_variable_anonymous = Keyword('_')
+        asp_variable = asp_variable_anonymous | asp_variable_name
+        asp_variable_expr = asp_variable_name.copy()
+        #
+        asp_variable_name.setParseAction(lambda t: asp.Variable(t[0]))
+        asp_variable_anonymous.setParseAction(lambda t: asp.AnonymousVariable())
+        asp_variable_expr.setParseAction(lambda t: o.Variable(t[0]))
 
         # TODO:
         # Instead of explicitly marking references with '&', we might just define a convention as follows:
@@ -191,14 +198,35 @@ def RawOutputSpecParser():
         reference = amp + py_identifier
         reference.setParseAction(lambda t: o.Reference(t[0]))  # to distinguish from literal string values
 
-        asp_query = originalTextFor(OneOrMore(QuotedString('"', escChar='\\') | CharsNotIn(';', exact=1)))  # TODO: We should parse this, to extract variable names etc.
+        # Note: must be able to distinguish between unquoted and quoted constants
+        asp_constant_symbol = Word(alphas_lowercase, alphanums + '_')
+        asp_quoted_string = QuotedString('"', escChar='\\')
+        asp_quoted_string.setParseAction(lambda t: asp.QuotedConstant(t[0]))
+        term = (asp_constant_symbol | asp_quoted_string | asp_variable | positive_integer).setResultsName('terms', listAllMatches=True)
+        terms = Optional(term + ZeroOrMore(comma + term))
+        classical_atom = predicate_name('predicate') + Optional(lpar + terms + rpar)
+        # Builtin atoms
+        builtin_op_binary = (Literal('=') | '==' | '!=' | '<>' | '<' | '<=' | '>' | '>=' | '#succ').setResultsName('predicate')
+        builtin_atom_binary = term + builtin_op_binary + term
+        builtin_atom_binary_prefix = builtin_op_binary + lpar + term + comma + term + rpar
+        builtin_atom = builtin_atom_binary | builtin_atom_binary_prefix
+        #
+        body_atom = classical_atom | builtin_atom
+        pos_body_atom = body_atom.copy()
+        neg_body_atom = NOT + body_atom
+        pos_body_atom.setParseAction(lambda t: asp.Literal(t.predicate, tuple(t.terms), False))
+        neg_body_atom.setParseAction(lambda t: asp.Literal(t.predicate, tuple(t.terms), True))
+        body_literal = neg_body_atom | pos_body_atom
+        #
+        asp_query = Group(body_literal + ZeroOrMore(comma + body_literal))
+        asp_query.setParseAction(lambda t: asp.Query(tuple(t[0])))
 
         expr = Forward()
 
         # TODO: Instead of semicolon, we could use (semicolon | FollowedBy(rbrace)) to make the last semicolon optional (but how would that work with asp_query...)
         query_clause = QUERY + colon + asp_query('query') + semicolon
         content_clause = CONTENT + colon + expr('content') + semicolon
-        index_clause = INDEX + colon + asp_variable_name('index') + semicolon
+        index_clause = INDEX + colon + asp_variable_expr('index') + semicolon
         key_clause = KEY + colon + expr('key') + semicolon
         #
         simple_set_spec = SET + lbrace + predicate_name('predicate') + slash + positive_integer('arity') + Optional(rightarrow + py_qualified_identifier('constructor')) + rbrace
@@ -219,7 +247,7 @@ def RawOutputSpecParser():
         expr_obj.setParseAction(lambda t: o.ExprObject(t.constructor, t.args))
 
         # Note: "|" always takes the first match, that's why we have to parse variable names after obj (otherwise "variable name" might consume the identifier of expr_obj)
-        expr << (literal | expr_collection | expr_obj | reference | asp_variable_name)
+        expr << (constant | expr_collection | expr_obj | reference | asp_variable_expr)
 
         named_output_spec = py_identifier('name') + equals + expr('expr') + semicolon
         output_statement = OUTPUT + lbrace + ZeroOrMore(named_output_spec) + rbrace
@@ -315,7 +343,7 @@ class EmbeddedSpecParser:
 def AnswerSetParser():
     '''Parse the answer set from a single line of dlvhex' output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
-        # As per the specification, we always return constants as string. Conversion has to be performed explicitly with int().
+        # As per the specification, we always return constants as strings. Conversion has to be performed explicitly with int(). See also `asp.RawAnswerSet` type.
         str_integer = Word(nums).setName('integer')
         quoted_string = QuotedString(quoteChar='"', escChar='\\')
         constant_symbol = Word(alphas_lowercase, alphanums + '_')
@@ -325,8 +353,8 @@ def AnswerSetParser():
         #
         fact.setParseAction(lambda t: (t.pred, tuple(t.args)))
 
-        def collect_facts(t) -> AnswerSet:
-            d = {}  # type: MutableMapping[str, List[FactArgumentTuple]]
+        def collect_facts(t) -> asp.RawAnswerSet:
+            d = {}  # type: MutableMapping[str, List[Tuple[str, ...]]]
             for (pred, args) in t:
                 if pred not in d:
                     d[pred] = [args]
@@ -337,7 +365,14 @@ def AnswerSetParser():
                     #
                     # Note:
                     # dlvhex2 differentiates between abc and "abc",
-                    # but on the python side it is represented by the same string 'abc'.
+                    # but on the python side they are represented by the same string 'abc'.
+                    # It is the responsibility of the ASP programmer to ensure quoted and
+                    # non-quoted strings aren't mixed (this library only generates quoted
+                    # strings during input mapping).
+                    #
+                    # What we could do:
+                    # * Wrap unquoted constants in a class (so the "common" case of quoted constants is as before)
+                    # * Or, probably better: Issue a warning if quoted and unquoted constants are mixed (maybe check this only in debug mode)
                 else:
                     d[pred].append(args)
             return d  # type: ignore
@@ -393,5 +428,5 @@ def parse_embedded_spec(string):
     return _parse(embedded_spec_parser, string)
 
 
-def parse_answer_set(string: str) -> AnswerSet:
+def parse_answer_set(string: str) -> asp.RawAnswerSet:
     return _parse(answer_set_parser, string)
