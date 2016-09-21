@@ -1,6 +1,5 @@
 import unittest
 from collections import defaultdict
-from io import StringIO
 from ..input import InputSpec, FactAccumulator
 
 
@@ -22,17 +21,18 @@ class TestInput(unittest.TestCase):
             'abc': 'xyz',
             3: 'zzz'
         }
+        zs = set(xs)
         acc = TestAccumulator()
         spec = InputSpec.parse(r'''
-            INPUT (xs, ys) {
-                p(x[0], x[1]) for x in set xs;      % a comment about the spec
-                p2(a, b) for (a, b) in set xs;      % tuple unpacking
-                q(y) for x in xs for y in x;
+            INPUT (xs, ys, zs) {
+                p(x[0], x[1]) for x in zs;      % a comment about the spec
+                p2(a, b) for (a, b) in zs;      % tuple unpacking
+                q(y) for x in zs for (_,y) in x;
                 r(xs[2][1]);
                 empty();
-                seq(i, x[0]) for (i, x) in sequence xs;
-                seq2(i, a) for (i, (a, _)) in sequence xs;
-                dict(value, key) for (key, value) in dictionary ys;
+                seq(i, x[0]) for (i, x) in xs;
+                seq2(i, a) for (i, (a, _)) in xs;
+                dict(value, key) for (key, value) in ys;
                 str(ys["abc"]);
             } % comment at the end''')
         expected_result = {
@@ -46,16 +46,9 @@ class TestInput(unittest.TestCase):
             'dict': set((v, k) for (k, v) in ys.items()),
             'str': set([('xyz',)]),
         }
-        spec.perform_mapping([xs, ys], acc)
-        self.assertEqual(acc.facts, expected_result)
-
-    def test_tuple_unpacking(self):
-        xs = [('a', 3), ('b', 4), ('c', 5)]
-        spec = InputSpec.parse(r'''
-            INPUT (xs) {
-                p(v[0], v[1]) for v in sequence xs;
-                q(i, xy) for (i, xy) in sequence xs;
-                r(i, x, y) for (i, (x, y)) in sequence xs;
-            }
-        ''')
-        # TODO
+        spec.perform_mapping([xs, ys, zs], acc)
+        # Assert the same predicates were generated, i.e. compare the keys
+        self.assertSetEqual(set(acc.facts), set(expected_result))
+        # Compare generated facts
+        for pred in expected_result:
+            self.assertSetEqual(acc.facts[pred], expected_result[pred], msg='for predicate {0!r}'.format(pred))

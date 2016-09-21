@@ -20,8 +20,8 @@ class TestParser(unittest.TestCase):
                     empty();
                     simple(obj);
                     p(nodes[1].label);
-                    node(n.label) for n in set nodes;
-                    edge(n.label, m.label, m.prop[3]) for n in nodes for (i, m) in sequence n.neighbors;
+                    node(n.label) for n in nodes;
+                    edge(n.label, m.label, m.prop[3]) for n in nodes for (i, m) in n.neighbors;
                     p(x) for (x, (_, y)) in obj;  % tuple unpacking and anonymous variables
                 }
             ''',
@@ -37,10 +37,10 @@ class TestParser(unittest.TestCase):
             r'INPUT { }',  # no argument list
             r'INPUT ( )',  # no body
             r'INPUT (x,y,z) { p(x, y) q(z) }',  # no semicolon after predicates
-            r'INPUT (set) { p(x) for x in set; }',  # keywords are not allowed as variable names
-            r'INPUT (set) { p(_) for _ in set; }',  # no anonymous variable in arguments
-            r'INPUT (for) { p(x) for x in set for; }',
-            r'INPUT (s) { p(x) for x in set for y in set; }',  # should raise a ParseException and not an UndefinedNameError
+            r'INPUT (in) { p(x) for x in in; }',  # keywords are not allowed as variable names
+            r'INPUT (for) { p(x) for x in for; }',
+            r'INPUT (xs) { p(_) for _ in xs; }',  # no anonymous variable in arguments
+            r'INPUT (s) { p(x) for x in in; }',  # should raise a ParseException and not an UndefinedNameError
         ]
         # TODO: Tests for invalid variable bindings (with assertRaises(UndefinedNameError) etc.)
         for invalid_input_spec in invalid_input_specs:
@@ -71,7 +71,7 @@ class TestParser(unittest.TestCase):
                     colored_nodes2 = sequence {
                         query: color(X, C, I);
                         index: I;
-                        content: ColoredNode(X, C, set { query: value(X, V); content: V; });   % TODO: how to implement things like this?
+                        content: ColoredNode(X, C, set { query: value(X, V); content: V; });   % A comment inside the spec
                     };
                 }
             ''',

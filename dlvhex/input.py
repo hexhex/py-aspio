@@ -1,5 +1,4 @@
 import collections
-import enum
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet
 from . import parser
@@ -49,11 +48,11 @@ class Variable(AssignmentTarget):
 
     def check_and_update_variable_bindings(self, bound_variables: MutableSet['Variable']) -> None:
         if self in bound_variables:
-            raise RedefinedNameError('Variable {0} is defined twice'.format(self))
+            raise RedefinedNameError('Variable {0!s} is defined twice'.format(self))
         bound_variables.add(self)
 
     def __repr__(self):
-        return 'Variable({0})'.format(repr(self._name))
+        return 'Variable({0!r})'.format(self._name)
 
     def __str__(self):
         return self._name
@@ -116,7 +115,7 @@ class Subscript:
             raise ValueError('Unable to access subscript [{0!r}] on object {1!r} during INPUT mapping'.format(self._key, obj))
 
     def __str__(self) -> str:
-        return '[{0}]'.format(repr(self._key))
+        return '[{0!r}]'.format(self._key)
 
 
 class Accessor:
@@ -129,7 +128,7 @@ class Accessor:
 
     def check_variable_bindings(self, bound_variables: AbstractSet[Variable]) -> None:
         if self._variable not in bound_variables:
-            raise UndefinedNameError('Undefined variable {0} is being accessed'.format(self._variable))
+            raise UndefinedNameError('Undefined variable {0!s} is being accessed'.format(self._variable))
 
     def perform_access(self, context: Context) -> Any:
         '''Performs the represented object access relative to the given context.'''
@@ -139,17 +138,9 @@ class Accessor:
         return result
 
 
-@enum.unique
-class IterationType(enum.Enum):
-    SET = 1
-    SEQUENCE = 2
-    DICTIONARY = 3
-
-
 class Iteration:
-    def __init__(self, target: AssignmentTarget, itertype: IterationType, accessor: Accessor) -> None:
+    def __init__(self, target: AssignmentTarget, accessor: Accessor) -> None:
         self._target = target
-        self._itertype = itertype
         self._accessor = accessor
 
     def check_and_update_variable_bindings(self, bound_variables: MutableSet[Variable]) -> None:
@@ -158,22 +149,24 @@ class Iteration:
 
     def get_collection_iterator(self, context: Context) -> Iterator[Any]:
         collection = self._accessor.perform_access(context)
-        if self._itertype == IterationType.SET:
+        if isinstance(collection, collections.abc.Set):
             return iter(collection)
-        elif self._itertype == IterationType.SEQUENCE:
-            # TODO: enumerate works with any iterable, but maybe we should check if the collection is a sequence type and raise an error otherwise? Might prevent some silent errors.
+        elif isinstance(collection, collections.abc.Sequence):
             return enumerate(collection)  # yields (index, element) tuples
-        elif self._itertype == IterationType.DICTIONARY:
-            if isinstance(collection, collections.Mapping):
-                return iter(collection.items())  # yields (key, element) tuples
-            else:
-                raise ValueError('When trying to perform iteration {0}: collection is not a dictionary, got instead: {1}'.format(repr(self), repr(collection)))
+        elif isinstance(collection, collections.abc.Mapping):
+            return iter(collection.items())  # yields (key, element) tuples
+        else:
+            raise ValueError(
+                'During iteration {0!r}: '
+                'collection object of type {1!r} could not be identified as Set, Sequence or Dictionary. '
+                'It should inherit from collections.abc.Set, collections.abc.Sequence, or collections.abc.Mapping.'
+                .format(self, type(collection)))
 
     def assign_to_target(self, value: Any, context: Context) -> None:
         self._target.assign(value, context)
 
     def __str__(self) -> str:
-        return 'FOR {0} IN {1} {2}'.format(str(self._target), self._itertype.name, str(self._accessor))
+        return 'FOR {0!s} IN {1!s}'.format(self._target, self._accessor)
 
 
 class Predicate:

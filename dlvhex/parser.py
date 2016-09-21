@@ -97,15 +97,12 @@ def RawInputSpecParser():
         INPUT = CaselessKeyword('INPUT').suppress()
         FOR = CaselessKeyword('for').suppress()
         IN = CaselessKeyword('in').suppress()
-        SET = CaselessKeyword('set').suppress()
-        SEQUENCE = CaselessKeyword('sequence').suppress()
-        DICTIONARY = CaselessKeyword('dictionary').suppress()
 
         target = Forward()
-        anonymous_var = Keyword('_')  # TODO: Test case with anonymous variable in INPUT
+        anonymous_var = Keyword('_')
         # Keywords cannot be used as variable names (we still allow "INPUT" as it never occurs inside the spec)
-        input_keyword = SET | SEQUENCE | DICTIONARY | FOR | IN
-        var = (~input_keyword + Word(alphas + '_', alphanums + '_')).setName('variable')
+        input_keyword = FOR | IN
+        var = (~input_keyword + ~anonymous_var + Word(alphas + '_', alphanums + '_')).setName('variable')
         tuple_match = lpar + target + ZeroOrMore(comma + target) + Optional(comma) + rpar
         # The target of an assignment, supporting tuple unpacking as a simple form of pattern matching in addition to plain variables
         target << (anonymous_var | var | tuple_match)
@@ -128,19 +125,11 @@ def RawInputSpecParser():
         subscript_accessor.setParseAction(lambda t: i.Subscript(t.key))
         accessor.setParseAction(lambda t: i.Accessor(t.var, t.path))
 
-        # Iterating over objects, some examples:
-        # - iterate over elements:                          for node in [set] nodes
-        # - iterate over indices and elements of a list:    for (i, m) in sequence node.neighbors
-        # - iterate over keys and elements of a dictionary: for (k, v) in dictionary some_dict
-        dictionary_type = DICTIONARY.copy().setParseAction(lambda: i.IterationType.DICTIONARY)
-        sequence_type = SEQUENCE.copy().setParseAction(lambda: i.IterationType.SEQUENCE)
-        set_type = Optional(SET).setParseAction(lambda: i.IterationType.SET)
-        # Note: SET must be last since it is optional, and the "|" operator takes the first match
-        iteration_type = dictionary_type | sequence_type | set_type
-        iteration = FOR + target('target') + IN + iteration_type('itertype') + accessor('accessor')
+        # Iterating over objects
+        iteration = FOR + target('target') + IN + accessor('accessor')
         iterations = Group(ZeroOrMore(iteration))
         #
-        iteration.setParseAction(lambda t: i.Iteration(t.target, t.itertype, t.accessor))
+        iteration.setParseAction(lambda t: i.Iteration(t.target, t.accessor))
 
         predicate_args = Group(Optional(accessor + ZeroOrMore(comma + accessor) + Optional(comma)))
         predicate_spec = predicate_name('pred') + lpar + predicate_args('args') + rpar + iterations('iters') + semicolon

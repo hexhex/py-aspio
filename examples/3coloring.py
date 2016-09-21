@@ -24,12 +24,12 @@ def main():
     a = Node('a')
     b = Node('b')
     c = Node('c')
-    nodes = [a, b, c]
-    arcs = [
+    nodes = {a, b, c}
+    arcs = {
         Arc(a, b),
         Arc(a, c),
         Arc(b, c)
-    ]
+    }
 
     # Iterate over all answer sets
     for result in prog.solve(nodes, arcs):
