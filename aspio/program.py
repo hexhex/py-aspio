@@ -194,7 +194,7 @@ class StreamAccumulator(FactAccumulator):
         self._stream = output_stream
 
     def arg_str(self, arg: Any) -> str:
-        '''Convert the given argument to a string suitable to be passed to dlvhex.'''
+        '''Convert the given argument to a string suitable to be passed to the ASP solver.'''
         if isinstance(arg, numbers.Integral):
             # Output integers without quotes (so we can use them for arithmetic in ASP)
             return str(arg)
@@ -218,7 +218,7 @@ class StreamAccumulator(FactAccumulator):
 
 
 class Results(Iterable['Result']):
-    '''The collection of results of a dlvhex2 invocation, corresponding to the set of all answer sets.'''
+    '''The collection of results of a Solver invocation, corresponding to the set of all answer sets.'''
     # TODO: Describe implicit access to mapped objects through __getattr__ (e.g. .all_graph iterates over answer sets, returning the "graph" object for every answer set)
     # TODO: Should support async/await
 
@@ -234,7 +234,7 @@ class Results(Iterable['Result']):
 
     def __iter__(self) -> Iterator['Result']:
         # Make sure we can only create one results iterator if we aren't caching
-        assert self.results is not None, 'Pass cache=True if you need to iterate over dlvhex results multiple times.'
+        assert self.results is not None, 'Pass cache=True if you need to iterate over results multiple times.'
         rs = self.results
         if type(self.results) != CachingIterable:
             self.results = None

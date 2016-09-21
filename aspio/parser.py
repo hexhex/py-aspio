@@ -39,7 +39,7 @@ def PyParsingDefaultWhitespaceChars(whitespace_chars):
     Since ParserElement.DEFAULT_WHITE_CHARS is a global variable, this method is not thread-safe (but no pyparsing parser construction is thread-safe for the same reason anyway).
     '''
     # A possible solution to this problem:
-    # Since the pyparsing code is basically a single big file, we could just copy it (under dlvhex/vendor or something like that) and have our own "private" version of pyparsing. (TODO: think about this some more and maybe do it)
+    # Since the pyparsing code is basically a single big file, we could just copy it (under aspio/vendor or something like that) and have our own "private" version of pyparsing. (TODO: think about this some more and maybe do it)
     previous_whitespace_chars = ParserElement.DEFAULT_WHITE_CHARS
     ParserElement.setDefaultWhitespaceChars(whitespace_chars)
     yield
@@ -330,7 +330,7 @@ class EmbeddedSpecParser:
 
 
 def AnswerSetParser():
-    '''Parse the answer set from a single line of dlvhex' output.'''
+    '''Parse the answer set from a single line of dlvhex2's output.'''
     with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
         # As per the specification, we always return constants as strings. Conversion has to be performed explicitly with int(). See also `asp.RawAnswerSet` type.
         str_integer = Word(nums).setName('integer')
@@ -349,7 +349,7 @@ def AnswerSetParser():
                     d[pred] = [args]
                     # Note:
                     # Technically we should use a set instead of a list here,
-                    # but dlvhex2 already performs the deduplication for us
+                    # but the ASP solver already performs the deduplication for us
                     # so there is no need to check for collisions again.
                     #
                     # Note:

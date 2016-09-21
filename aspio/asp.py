@@ -72,7 +72,7 @@ class Query:
             yield from lit.variables()
 
 
-Rule = str  # TODO: Could be a more sophisticated type to support passing the rule to dlvhex directly (when it is used via a shared library)
+Rule = str  # TODO: Should be a more sophisticated type to support passing the rule to the solver directly (when it is used via a shared library)
 
 # "raw" answer set, i.e. the constants are just strings
 RawAnswerSet = Mapping[str, Iterable[Tuple[str, ...]]]

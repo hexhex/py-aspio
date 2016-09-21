@@ -2,23 +2,23 @@
 from collections import namedtuple
 from pathlib import Path
 import logging
-import dlvhex
+import aspio
 
-# Enable debug messages from dlvhex
-dlvhex.log.addHandler(logging.StreamHandler())
-dlvhex.log.setLevel(logging.DEBUG)
+# Enable debug messages from py-aspio
+aspio.log.addHandler(logging.StreamHandler())
+aspio.log.setLevel(logging.DEBUG)
 
 Node = namedtuple('Node', ['label'])
 ColoredNode = namedtuple('ColoredNode', ['label', 'color'])
 Arc = namedtuple('Arc', ['start', 'end'])
 
-dlvhex.register_dict(globals())
+aspio.register_dict(globals())
 
 
 def main():
     # Load ASP program and input/output specifications from file
     asp_file = Path(__file__).with_name('3coloring.dl')
-    prog = dlvhex.Program(filename=asp_file)
+    prog = aspio.Program(filename=asp_file)
 
     # Some sample data
     a = Node('a')

@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='dlvhex',
+    name='aspio',
     version='0.0.1',
-    description='Python integration of the dlvhex solver',
-    url='https://github.com/JakobR/py-dlvhex',
+    description='ASP interface to object-oriented programs',
+    url='https://github.com/hexhex/py-aspio',
 
     packages=find_packages(exclude=['*.tests', '*.tests.*', 'tests.*', 'tests']),
 
@@ -16,5 +16,5 @@ setup(
     author_email='jakob.rath@student.tuwien.ac.at',
     license='MIT',
 
-    test_suite='dlvhex.tests',
+    test_suite='aspio.tests',
 )

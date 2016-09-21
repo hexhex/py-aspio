@@ -36,7 +36,7 @@ class SolverError(Exception):
 class SolverSubprocessError(SolverError):
     '''Raised when the solver subprocess exits abnormally.'''
     def __init__(self, returncode, stderr):
-        message = 'dlvhex2 terminated with return code {0}.\nOutput on stderr:\n{1}'.format(returncode, stderr)
+        message = 'The ASP solver terminated with return code {0}.\nOutput on stderr:\n{1}'.format(returncode, stderr)
         super().__init__(message)
         self.returncode = returncode
         self.stderr = stderr

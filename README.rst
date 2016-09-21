@@ -1,28 +1,30 @@
-=========
-py-dlvhex
-=========
+========
+py-aspio
+========
 
-Python integration of the `dlvhex solver <http://www.kr.tuwien.ac.at/research/systems/dlvhex/>`_.
+The ASP interface to object-oriented programs, implemented in Python.
 
 
 Dependencies
 ============
 
-* `dlvhex 2.6+ <https://github.com/hexhex/core>`_
+* An ASP Solver, currently only `dlvhex 2.6+ <https://github.com/hexhex/core>`_ is supported
 
-* python 3.5+
+* `Python 3.5+ <https://www.python.org/>`_
 
-* pyparsing
+* `pyparsing <https://pypi.python.org/pypi/pyparsing>`_
 
 
 
-Installation (for development)
-==============================
+Installation (for py-aspio development)
+=======================================
+
+Clone the repository and install the package in development mode:
 
 ::
 
-    git clone https://github.com/JakobR/py-dlvhex py-dlvhex
-    cd py-dlvhex
+    git clone https://github.com/hexhex/py-aspio py-aspio
+    cd py-aspio
     python3 setup.py develop
 
 
@@ -42,4 +44,4 @@ Running the typechecker
 Install the ``mypy-lang`` package first (e.g. ``pip3 install mypy-lang``).
 To run the typechecker::
 
-    mypy -p dlvhex
+    mypy -p aspio

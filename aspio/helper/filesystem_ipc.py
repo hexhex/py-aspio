@@ -46,7 +46,7 @@ class TemporaryNamedPipe(FilesystemIPC):
         Raises `NotImplementedError` if `mkfifo` from the builtin `os` module is not available.
         '''
         if hasattr(os, 'mkfifo'):
-            self.tmpdir = tempfile.TemporaryDirectory(prefix='pydlvhex_')  # creates a temporary directory, avoiding any race conditions
+            self.tmpdir = tempfile.TemporaryDirectory(prefix='pyaspio_')  # creates a temporary directory, avoiding any race conditions
             self.name = os.path.join(self.tmpdir.name, 'pipe')
             os.mkfifo(self.name)  # may raise OSError
 
@@ -84,7 +84,7 @@ class TemporaryFile(FilesystemIPC):
         To ensure proper removal of the file after use,
         make sure to call `cleanup()` on the returned object, or use it as a context manager.
         '''
-        fd, self.name = tempfile.mkstemp(prefix='pydlvhex_')
+        fd, self.name = tempfile.mkstemp(prefix='pyaspio_')
         # Ideally, we would use this file descriptor instead of reopening the file from the path later,
         # but then we do not know whether the file descriptor has already been closed.
         # (possible problems: we might leak a file descriptor, or close it twice (thus risking to close another unrelated file))

@@ -169,10 +169,10 @@ class ExprCollection(Expr):
     def __init__(self, query: asp.Query, subexpressions: Sequence[Expr]) -> None:
         self.query = query
         self.subexpressions = tuple(subexpressions)
-        # # TODO: Note the precondition somewhere: no predicate starting with pydlvhex__ may be used anywhere in the ASP program (or our additional rules will alter the program's meaning).
+        # # TODO: Note the precondition somewhere: no predicate starting with aspio__ may be used anywhere in the ASP program (or our additional rules will alter the program's meaning).
         # TODO: Special handling for cases where the original predicate can be used (e.g., only one literal and all variables captured)
         # TODO: Similar output expressions may generate duplicate rules... would be good if both expressions could use the same rule, without having all the data twice in the answer set
-        self.output_predicate = 'pydlvhex__' + str(id(self))  # unique for as long as this object is alive
+        self.output_predicate = 'aspio__' + str(id(self))  # unique for as long as this object is alive
         self.captured_variables = None  # type: Tuple[str]
 
     def additional_rules(self) -> Iterable[asp.Rule]:

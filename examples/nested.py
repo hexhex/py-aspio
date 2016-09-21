@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-import dlvhex
+import aspio
 
-program = dlvhex.Program(code=r'''
+program = aspio.Program(code=r'''
     p(1).
     p(2).
 
