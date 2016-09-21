@@ -60,6 +60,7 @@ class TestOutput(unittest.TestCase):
         ''').solve_one().xs
         self.assertSetEqual(xs, {1, 2, 3})
 
+    def test_qualified_name_resolution(self):
         xs = Program(code=r'''
             p("/usr", "bin"). p("/usr/local", "bin").
             %! OUTPUT { xs = set { p/2 -> pathlib.Path }; }
@@ -156,7 +157,7 @@ class TestOutput(unittest.TestCase):
             %! }
         ''')
         program.register(IdentityTuple)
-        with program.solve().all_xs as xss:
+        with program.solve().each_xs as xss:
             for xs in xss:
                 self.assertEqual(len(xs), 1)  # one object in the mapped 'xs' result
 

@@ -251,10 +251,11 @@ class Results(Iterable['Result']):
             return False
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith('all_'):  # TODO: maybe "each_" or "every_" would read better?
-            return ResultsAttributeIterator(self, name[4:])
+        prefix = 'each_'
+        if name.startswith(prefix):
+            return ResultsAttributeIterator(self, name[len(prefix):])
         else:
-            raise AttributeError("No attribute with name {0!r}. Prefix an output variable name with 'all_' when iterating over its values for all answer sets.".format(name))
+            raise AttributeError("No attribute with name {0!r}. Prefix an output variable name with '{1!s}' when iterating over its values for all answer sets.".format(name, prefix))
 
     def close(self) -> None:
         self.answer_sets.close()

@@ -36,7 +36,7 @@ def main():
         print(result.colored_nodes)
 
     # A shortcut if only one output variable is needed
-    for colored_nodes in prog.solve(nodes, arcs).all_colored_nodes:
+    for colored_nodes in prog.solve(nodes, arcs).each_colored_nodes:
         print(colored_nodes)
 
     # Compute a single answer set, or return None if no answer set exists
