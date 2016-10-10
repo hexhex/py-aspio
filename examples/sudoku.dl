@@ -30,8 +30,6 @@ num(1..9).
 % Generate candidate grids
 sudoku(X, Y, N) :- given(X, Y, N), num(N).
 {sudoku(X, Y, N) : num(N)} :- x(X), y(Y).
-% {sudoku(X, Y, N) : num(N)} :- x(X), y(Y), given(X, Y, E), empty(E).
-% {sudoku(X, Y, N) : num(N)} :- x(X), y(Y), not given(X, Y, _).
 
 % At most one number per cell
 :- sudoku(X, Y, N1), sudoku(X, Y, N2), N1 != N2.
@@ -53,19 +51,3 @@ sameblock(X1, Y1, X2, Y2) :-
     x(X1), x(X2), y(Y1), y(Y2),
     BX = X1 / 3, BX = X2 / 3,
     BY = Y1 / 3, BY = Y2 / 3.
-
-
-
-% % No duplicate numbers in same block
-% :- sudoku(X1, Y1, N), block(X1, Y1, B), sudoku(X2, Y2, N), block(X2, Y2, B), X1 != X2.
-% :- sudoku(X1, Y1, N), block(X1, Y1, B), sudoku(X2, Y2, N), block(X2, Y2, B), Y1 != Y2.
-
-% block(0..2, 0..2, 0).
-% block(3..5, 0..2, 1).
-% block(6..8, 0..2, 2).
-% block(0..2, 3..5, 3).
-% block(3..5, 3..5, 4).
-% block(6..8, 3..5, 5).
-% block(0..2, 6..8, 6).
-% block(3..5, 6..8, 7).
-% block(6..8, 6..8, 8).
