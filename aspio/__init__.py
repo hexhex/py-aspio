@@ -4,7 +4,7 @@ from .input import InputSpec
 from .output import OutputSpec
 from .program import Program
 from .registry import register, register_dict, import_from_module
-from .solver import Solver
+from .solver import Solver, SolverOptions
 
 __all__ = [
     'CircularReferenceError',
@@ -24,6 +24,7 @@ __all__ = [
     'import_from_module',
     #
     'Solver',
+    'SolverOptions',
 ]
 
 # Set up logging. By default, do not output any log messages from library code.

@@ -1,4 +1,4 @@
-from .solver import Solver, SolverOptions
+from .abc import Solver, SolverOptions
 from .dlvhex2 import Dlvhex2Solver
 
 __all__ = [
@@ -8,5 +8,8 @@ __all__ = [
     'SolverOptions',
 ]
 
-# TODO: Once we support multiple solvers, we should set the default solver depending on what's installed
-DefaultSolver = Dlvhex2Solver  # type: Callable[..., Solver]
+
+def DefaultSolver() -> Solver:
+    """Returns an instance of the default solver."""
+    # TODO: Once we support multiple solvers, we should set the default solver depending on what's installed
+    return Dlvhex2Solver()

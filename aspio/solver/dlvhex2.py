@@ -8,7 +8,7 @@ from ..helper.typing import ClosableIterable
 from ..errors import SolverError, SolverSubprocessError
 from ..helper import FilesystemIPC, StreamCaptureThread, TemporaryFile, TemporaryNamedPipe
 from ..parser import parse_answer_set, ParseException
-from .solver import Solver, SolverOptions
+from .abc import Solver, SolverOptions
 from .. import asp
 
 
