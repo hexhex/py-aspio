@@ -1,0 +1,71 @@
+%!  INPUT (Sequence<Sequence<int>> grid) {
+%!      given(x, y, n) for (y, row) in grid for (x, n) in row;
+%!  }
+
+%!  OUTPUT {
+%!      solved_grid = sequence {
+%!          query: y(Y);
+%!          index: Y;
+%!          content: sequence {
+%!              query: sudoku(X, Y, N);
+%!              index: X;
+%!              content: N;
+%!          };
+%!      };
+%!  }
+
+% Coordinate range
+x(0..8).
+y(0..8).
+
+% Numbers: 1..9, Empty space: 0
+empty(0).
+num(1..9).
+
+% Assertions about input
+:- given(X, _, _), not x(X).
+:- given(_, Y, _), not y(Y).
+:- given(_, _, N), not num(N), not empty(N).
+
+% Generate candidate grids
+sudoku(X, Y, N) :- given(X, Y, N), num(N).
+{sudoku(X, Y, N) : num(N)} :- x(X), y(Y).
+% {sudoku(X, Y, N) : num(N)} :- x(X), y(Y), given(X, Y, E), empty(E).
+% {sudoku(X, Y, N) : num(N)} :- x(X), y(Y), not given(X, Y, _).
+
+% At most one number per cell
+:- sudoku(X, Y, N1), sudoku(X, Y, N2), N1 != N2.
+
+% All cells must be set
+:- x(X), y(Y), not sudoku(X, Y, _).
+
+% No duplicate numbers in same column
+:- sudoku(X, Y1, N), sudoku(X, Y2, N), Y1 != Y2.
+
+% No duplicate numbers in same row
+:- sudoku(X1, Y, N), sudoku(X2, Y, N), X1 != X2.
+
+% No duplicate numbers in same block
+:- sudoku(X1, Y1, N), sudoku(X2, Y2, N), sameblock(X1, Y1, X2, Y2), X1 != X2.
+:- sudoku(X1, Y1, N), sudoku(X2, Y2, N), sameblock(X1, Y1, X2, Y2), Y1 != Y2.
+
+sameblock(X1, Y1, X2, Y2) :-
+    x(X1), x(X2), y(Y1), y(Y2),
+    BX = X1 / 3, BX = X2 / 3,
+    BY = Y1 / 3, BY = Y2 / 3.
+
+
+
+% % No duplicate numbers in same block
+% :- sudoku(X1, Y1, N), block(X1, Y1, B), sudoku(X2, Y2, N), block(X2, Y2, B), X1 != X2.
+% :- sudoku(X1, Y1, N), block(X1, Y1, B), sudoku(X2, Y2, N), block(X2, Y2, B), Y1 != Y2.
+
+% block(0..2, 0..2, 0).
+% block(3..5, 0..2, 1).
+% block(6..8, 0..2, 2).
+% block(0..2, 3..5, 3).
+% block(3..5, 3..5, 4).
+% block(6..8, 3..5, 5).
+% block(0..2, 6..8, 6).
+% block(3..5, 6..8, 7).
+% block(6..8, 6..8, 8).
