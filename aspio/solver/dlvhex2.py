@@ -150,8 +150,8 @@ class DlvhexLineReader(ClosableIterable[str]):
         # and dlvhex closed stdout (and probably terminated).
         # Give it a chance to terminate gracefully.
         try:
-            self.process.wait(timeout=0.005)
-        except subprocess.TimeoutExpired:
+            self.process.wait(timeout=0.005)  # type: ignore (mypy does not know about `timeout`)
+        except subprocess.TimeoutExpired:  # type: ignore (mypy does not know about `TimeoutExpired`)
             pass
         self.close()
 
@@ -166,8 +166,8 @@ class DlvhexLineReader(ClosableIterable[str]):
             # Still running? Kill the subprocess
             process.terminate()
             try:
-                process.wait(timeout=0.001)
-            except subprocess.TimeoutExpired:
+                process.wait(timeout=0.001)  # type: ignore (mypy does not know about `timeout`)
+            except subprocess.TimeoutExpired:  # type: ignore (mypy does not know about `TimeoutExpired`)
                 # Kill unconditionally after a short timeout.
                 # A potential problem with SIGKILL: we might not get all the error messages on stderr (if the child process is killed before it has a chance to write an error message)
                 process.kill()

@@ -1,6 +1,6 @@
 import re
 from contextlib import contextmanager
-from typing import MutableMapping  # noqa
+from typing import MutableMapping, Tuple  # noqa
 from pyparsing import (  # type: ignore
     alphas,
     alphanums,

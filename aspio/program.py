@@ -35,9 +35,6 @@ class Program:
         self._output_spec = None  # type: Optional[OutputSpec]
         self.solver = None  # type: Solver
         self.local_registry = copy(global_registry) if use_global_registry else Registry()  # type: Registry
-        # self.register = self.local_registry.register
-        # self.register_dict = self.local_registry.register_dict
-        # self.import_from_module = self.local_registry.import_from_module
         if filename is not None:
             self.append_file(filename)
         if code is not None:
@@ -51,24 +48,21 @@ class Program:
         other._output_spec = copy(self._output_spec)
         other.solver = copy(self.solver)
         other.local_registry = copy(self.local_registry)
-        # other.register = other.local_registry.register
-        # other.register_dict = other.local_registry.register_dict
-        # other.import_from_module = other.local_registry.import_from_module
         return other
 
     @property
-    def local_registry(self):
+    def local_registry(self) -> Registry:
         return self._local_registry
 
     @local_registry.setter
-    def local_registry(self, value):
+    def local_registry(self, value: Registry) -> None:
         self._local_registry = value
         self.register = self._local_registry.register
         self.register_dict = self._local_registry.register_dict
         self.import_from_module = self._local_registry.import_from_module
 
     @property
-    def input_spec(self):
+    def input_spec(self) -> InputSpec:
         '''The input specification, if one has been set or parsed from input, or an empty specification otherwise.'''
         if self._input_spec is not None:
             return self._input_spec
@@ -76,16 +70,16 @@ class Program:
             return InputSpec.empty()
 
     @input_spec.setter
-    def input_spec(self, value):
+    def input_spec(self, value: InputSpec) -> None:
         self._input_spec = value
 
     @property
-    def has_input_spec(self):
+    def has_input_spec(self) -> bool:
         '''True iff an input specification has been set.'''
         return self._input_spec is not None
 
     @property
-    def output_spec(self):
+    def output_spec(self) -> OutputSpec:
         '''The output specification, if one has been set or parsed from output, or an empty specification otherwise.'''
         if self._output_spec is not None:
             return self._output_spec
@@ -93,11 +87,11 @@ class Program:
             return OutputSpec.empty()
 
     @output_spec.setter
-    def output_spec(self, value):
+    def output_spec(self, value: OutputSpec) -> None:
         self._output_spec = value
 
     @property
-    def has_output_spec(self):
+    def has_output_spec(self) -> bool:
         '''True iff an output specification has been set.'''
         return self._output_spec is not None
 

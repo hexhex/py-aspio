@@ -61,8 +61,7 @@ class Expr(metaclass=ABCMeta):
         '''All the variable expressions (i.e., does not include those occurring only in queries) used in this expression and any subexpressions.'''
         return ()
 
-    # def check(self, toplevel_name: str, bound_variables: Iterable[str], bound_references: Iterable[str]) -> None:
-    def check(self, toplevel_name: str, bound_variables: Tuple[str]) -> None:
+    def check(self, toplevel_name: str, bound_variables: Tuple[str, ...]) -> None:
         pass
 
     def additional_rules(self) -> Iterable[asp.Rule]:
@@ -107,7 +106,7 @@ class Variable(Expr):
     def variables(self) -> Iterable['Variable']:
         return [self]
 
-    def check(self, toplevel_name: str, bound_variables: Tuple[str]) -> None:
+    def check(self, toplevel_name: str, bound_variables: Tuple[str, ...]) -> None:
         if self.name not in bound_variables:
             raise UndefinedNameError('Variable {0!s} is not defined at point of use (at least once in definition of {1!s}).'.format(self.name, toplevel_name))
 
@@ -146,7 +145,7 @@ class ExprObject(Expr):
             yield from subexpr.captured_predicates()
         # return chain(*(subexpr.captured_predicates() for subexpr in self.args))
 
-    def check(self, toplevel_name: str, bound_variables: Tuple[str]) -> None:
+    def check(self, toplevel_name: str, bound_variables: Tuple[str, ...]) -> None:
         for subexpr in self.args:
             subexpr.check(toplevel_name, bound_variables)
 
@@ -155,7 +154,7 @@ def ExprSimpleSet(predicate_name: str, arity: int, constructor_name: Optional[st
     # Simple set semantics: just take the tuples as-is and put them in a set.
     varnames = ['X' + str(i) for i in range(arity)]
     literal = asp.Literal(predicate_name, tuple(asp.Variable(v) for v in varnames), False)
-    query = asp.Query([literal])
+    query = asp.Query((literal,))
     if arity == 1 and constructor_name is None:
         # 1-tuples are unpacked automatically
         content = Variable(varnames[0])  # type: Expr
@@ -173,7 +172,7 @@ class ExprCollection(Expr):
         # TODO: Special handling for cases where the original predicate can be used (e.g., only one literal and all variables captured)
         # TODO: Similar output expressions may generate duplicate rules... would be good if both expressions could use the same rule, without having all the data twice in the answer set
         self.output_predicate = 'aspio__' + str(id(self))  # unique for as long as this object is alive
-        self.captured_variables = None  # type: Tuple[str]
+        self.captured_variables = None  # type: Tuple[str, ...]
 
     def additional_rules(self) -> Iterable[asp.Rule]:
         rule = self.output_predicate + '(' + ','.join(self.captured_variables) + ') :- ' + str(self.query) + '.'
@@ -192,7 +191,7 @@ class ExprCollection(Expr):
         for subexpr in self.subexpressions:
             yield from subexpr.variables()
 
-    def check(self, toplevel_name: str, bound_variables: Tuple[str]) -> None:
+    def check(self, toplevel_name: str, bound_variables: Tuple[str, ...]) -> None:
         # NOTE: We have to use the variable names (i.e., strings) here,
         #       because the query returns ASP variable objects, while the expressions return variable expression objects.
         #
@@ -215,7 +214,7 @@ class ExprCollection(Expr):
         for subexpr in self.subexpressions:
             subexpr.check(toplevel_name, bound_variables + tuple(query_variables))
 
-    def get_captured_values(self, r: OutputResult, lc: LocalContext) -> Sequence[Tuple[str, ...]]:
+    def get_captured_values(self, r: OutputResult, lc: LocalContext) -> Iterable[Tuple[str, ...]]:
         '''Return only those tuples of the `output_predicate` that assign the correct values for the fixed variables.'''
         for captured_values in r.answer_set.get(self.output_predicate, ()):
             # Only yield tuples that assign the correct values for the fixed variables
@@ -283,7 +282,7 @@ class ExprSequence(ExprCollection):
         make_sequence = r.registry.sequence_constructor  # type: ignore
         return make_sequence(x[1] for x in xs)  # type: ignore
 
-    def check(self, toplevel_name: str, bound_variables: Iterable[Variable]) -> None:
+    def check(self, toplevel_name: str, bound_variables: Tuple[str, ...]) -> None:
         super().check(toplevel_name, bound_variables)
         self.index_pos = self.captured_variables.index(self.index.name)
 

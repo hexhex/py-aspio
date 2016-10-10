@@ -1,4 +1,5 @@
 import collections
+import collections.abc  # type: ignore (mypy does not know about collections.abc)
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, Any, Union, Dict, Iterator, MutableSet, Sequence, AbstractSet
 from . import parser
@@ -149,11 +150,11 @@ class Iteration:
 
     def get_collection_iterator(self, context: Context) -> Iterator[Any]:
         collection = self._accessor.perform_access(context)
-        if isinstance(collection, collections.abc.Set):
+        if isinstance(collection, collections.abc.Set):  # type: ignore (mypy does not know about collections.abc)
             return iter(collection)
-        elif isinstance(collection, collections.abc.Sequence):
+        elif isinstance(collection, collections.abc.Sequence):  # type: ignore (mypy does not know about collections.abc)
             return enumerate(collection)  # yields (index, element) tuples
-        elif isinstance(collection, collections.abc.Mapping):
+        elif isinstance(collection, collections.abc.Mapping):  # type: ignore (mypy does not know about collections.abc)
             return iter(collection.items())  # yields (key, element) tuples
         else:
             raise ValueError(
