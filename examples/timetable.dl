@@ -1,0 +1,72 @@
+%!  INPUT (SchoolData sd) {
+%!      days(sd.days_per_week);
+%!      periods(sd.periods_per_day);
+%!      class(c.id) for (_, c) in sd.classes;
+%!      req(c.id, r.subject.id, r.weekly_periods) for (_, c) in sd.classes for (_, r) in c.requirements;
+%!      teacher_subject(t.id, s.id) for (_, t) in sd.teachers for (_, s) in t.subjects;
+%!  }
+
+%!  OUTPUT {
+%!      raw = set { assign/5 };
+%!
+%!      % class_timetables[class][day][period] == subject
+%!      class_timetables = dictionary {
+%!          query: class(C);
+%!          key: C;
+%!          content: sequence {
+%!              query: day(D);
+%!              index: D;
+%!              content: sequence {
+%!                  query: classassign(C,S,_,D,P);
+%!                  index: P;
+%!                  content: S;
+%!              };
+%!          };
+%!      };
+%
+%!      % teacher_timetables[teacher][day][period] == (class, subject)
+%!      teacher_timetables = dictionary {
+%!          query: teacher_subject(T,_);
+%!          key: int(T);
+%!          content: sequence {
+%!              query: day(D);
+%!              index: D;
+%!              content: sequence {
+%!                  query: teacherassign(C,S,T,D,P);
+%!                  index: P;
+%!                  content: (C,S);
+%!              };
+%!          };
+%!      };
+%!
+%!      % teachers[class] == { (teacher, subject) }
+%!      teachers = dictionary {
+%!          query: class(C);
+%!          key: C;
+%!          content: set { query: assign(C,S,T,_,_); content: (int(T), S); };
+%!      };
+%!  }
+
+day(D) :- #int(D), D < PerWeek, days(PerWeek).
+period(P) :- #int(P), P < PerDay, periods(PerDay).
+
+assign(C,S,T,D,P) v -assign(C,S,T,D,P) :- class(C), teacher_subject(T,S), day(D), period(P), req(C,S,_).
+
+% Ensure that every period has a `classassign` and `teacherassign` atom.
+% We can skip this once the `sequence` output mapping can handle missing indices (by setting them to `None` or using a user-defined default value).
+classassign(C,S,T,D,P) :- assign(C,S,T,D,P).
+classassign(C,"---","---",D,P) :- class(C), day(D), period(P), not assign(C,_,_,D,P).
+teacherassign(C,S,T,D,P) :- assign(C,S,T,D,P).
+teacherassign("--","---",T,D,P) :- teacher_subject(T,_), day(D), period(P), not assign(_,_,T,D,P).
+
+% A class is taught at most one subject at any one time
+:- assign(C,S1,_,D,P), assign(C,S2,_,D,P), S1 != S2.
+
+% A teacher instructs at most one class at any one time
+:- assign(C1,_,T,D,P), assign(C2,_,T,D,P), C1 != C2.
+
+% A class has at most one teacher per subject
+:- assign(C,S,T1,_,_), assign(C,S,T2,_,_), T1 != T2.
+
+% Class receives correct number of lectures
+:- req(C,S,WeeklyP), #count{D,P: assign(C,S,_,D,P)} != WeeklyP.
