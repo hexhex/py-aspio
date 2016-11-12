@@ -34,17 +34,19 @@ class TestInput(unittest.TestCase):
                 seq2(i, a) for (i, (a, _)) in xs;
                 dict(value, key) for (key, value) in ys;
                 str(ys["abc"]);
+                -neg(xs[0][0], xs[0][1]);
             } % comment at the end''')
         expected_result = {
             'p': set(xs),
             'p2': set(xs),
-            'q': set((y,) for x in xs for y in x),
-            'r': set([('def',)]),  # Note: need to wrap the tuple in an iterable, because set() will iterate over its argument
-            'empty': set([tuple()]),
-            'seq': set((i, x[0]) for (i, x) in enumerate(xs)),
-            'seq2': set((i, x[0]) for (i, x) in enumerate(xs)),
-            'dict': set((v, k) for (k, v) in ys.items()),
-            'str': set([('xyz',)]),
+            'q': {(y,) for x in xs for y in x},
+            'r': {('def',)},
+            'empty': {tuple()},
+            'seq': {(i, x[0]) for (i, x) in enumerate(xs)},
+            'seq2': {(i, x[0]) for (i, x) in enumerate(xs)},
+            'dict': {(v, k) for (k, v) in ys.items()},
+            'str': {('xyz',)},
+            '-neg': {(0, 0)},
         }
         spec.perform_mapping([xs, ys, zs], acc)
         # Assert the same predicates were generated, i.e. compare the keys

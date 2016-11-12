@@ -60,7 +60,7 @@ def ignore_comments(parser):
 with PyParsingDefaultWhitespaceChars(DEFAULT_WHITESPACE_CHARS):
     alphas_lowercase = srange('[a-z]')
     alphas_uppercase = srange('[A-Z]')
-    predicate_name = Word(alphas_lowercase, alphanums + '_').setName('predicate name')
+    predicate_name = (Optional('-') + Word(alphas_lowercase, alphanums + '_')).setParseAction(''.join).setName('predicate name')
     # Currently we only support ASCII identifiers for the python side.
     # Python (starting with version 3.0) supports additional characters in identifiers, see https://docs.python.org/3/reference/lexical_analysis.html#identifiers
     # It would be nice to support the same set, but it's not absolutely necessary.

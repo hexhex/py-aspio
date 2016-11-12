@@ -190,3 +190,23 @@ class TestOutput(unittest.TestCase):
             %! }
         ''').solve_one().d
         self.assertDictEqual(dict(d), {'a': {1, 2}, 'c': {3}})
+
+    def test_query_strong_negation(self):
+        result = Program(code=r'''
+            -p(1). -p(2).
+            p(3).
+            %!  OUTPUT {
+            %!      x = set { query: -p(X); content: int(X); };
+            %!  }
+        ''').solve_one()
+        self.assertSetEqual(result.x, {1, 2})
+
+    def test_query_default_negation(self):
+        result = Program(code=r'''
+            d(1). d(2). d(3). d(4). d(5).  % need to specify domain for the query to be safe
+            p(1). p(2).
+            %!  OUTPUT {
+            %!      x = set { query: d(X), not p(X); content: int(X); };
+            %!  }
+        ''').solve_one()
+        self.assertSetEqual(result.x, {3, 4, 5})

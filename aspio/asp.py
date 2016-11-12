@@ -53,7 +53,7 @@ class Literal(namedtuple('Literal', ['predicate', 'arguments', 'defaultNegated']
             if isinstance(arg, Variable):
                 yield arg
 
-Literal.predicate.__doc__ = 'predicate name'
+Literal.predicate.__doc__ = 'predicate name (prefixed with a `-` for strongly negated literals)'
 Literal.arguments.__doc__ = 'a tuple containing the argument terms, cf. type `TermTuple`'
 Literal.defaultNegated.__doc__ = 'a bool determining whether the literal is default-negated'
 
