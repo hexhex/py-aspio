@@ -4,6 +4,7 @@ setup(
     name='aspio',
     version='0.0.1',
     description='ASP interface to object-oriented programs',
+    long_description='This library simplifies integration of Answer Set Programming into Python applications.',
     url='https://github.com/hexhex/py-aspio',
 
     packages=find_packages(exclude=['*.tests', '*.tests.*', 'tests.*', 'tests']),
@@ -17,4 +18,19 @@ setup(
     license='MIT',
 
     test_suite='aspio.tests',
+
+    # A list of classifiers can be found at
+    # https://pypi.python.org/pypi?%3Aaction=list_classifiers
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
+
+        'License :: OSI Approved :: MIT License',
+
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.5',
+    ],
 )

@@ -5,6 +5,7 @@ py-aspio
 The ASP interface to object-oriented programs, implemented in Python.
 
 
+
 Dependencies
 ============
 
@@ -16,12 +17,19 @@ Dependencies
 
 
 
-Installation (for py-aspio development)
-=======================================
-
-Clone the repository and install the package in development mode:
+Installation
+============
 
 ::
+
+    pip3 install aspio
+
+
+
+Installation for development (of py-aspio itself)
+=================================================
+
+Clone the repository and install the package in development mode:::
 
     git clone https://github.com/hexhex/py-aspio py-aspio
     cd py-aspio
