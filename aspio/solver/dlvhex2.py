@@ -1,7 +1,9 @@
 import io
+import os
 import signal
 import subprocess  # type: ignore
 import weakref
+from copy import copy
 from itertools import chain
 from typing import Callable, IO, Iterable, Iterator, Optional
 from ..helper.typing import ClosableIterable
@@ -74,12 +76,19 @@ class Dlvhex2Solver(Solver):
                 with open(tmp_input.name, 'wt', encoding=self.encoding) as stream:
                     write_input(stream)
 
+            # Currently dlvhex2 internally loads a Python 2.x interpreter,
+            # which leads to an error if PYTHONPATH is set to a Python 3.x site-packages directory.
+            # (This error has so far only manifested during test runs, but not when executing the standalone examples.)
+            env = copy(os.environ)
+            env.pop('PYTHONPATH', None)
+
             # Start dlvhex2 subprocess
             process = subprocess.Popen(
                 args,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
 
             try:

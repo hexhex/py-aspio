@@ -1,7 +1,7 @@
 Packaging
 =========
 
-See `https://packaging.python.org/distributing/#packaging-your-project`_.
+See https://packaging.python.org/distributing/#packaging-your-project.
 
 1. First make sure the correct git branch is checked out, and all incomplete changes are stashed.
 

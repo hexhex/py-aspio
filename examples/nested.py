@@ -32,7 +32,7 @@ expected_result = frozenset({
     (2, frozenset({'x', 'y'})),
 })
 
-for (i, result) in enumerate(program.solve().all_result):
+for (i, result) in enumerate(program.solve().each_result):
     print('Answer set {0!s}:'.format(i + 1))
     print('Result         : {0!r}'.format(result))
     print('Expected result: {0!r}'.format(expected_result))

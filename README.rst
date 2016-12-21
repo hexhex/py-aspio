@@ -26,8 +26,15 @@ Installation
 
 
 
-Installation for development (of py-aspio itself)
-=================================================
+Usage
+=====
+
+Stand-alone examples can be found in `the examples directory <https://github.com/hexhex/py-aspio/tree/master/examples>`_.
+
+
+
+Development of py-aspio itself
+==============================
 
 Clone the repository and install the package in development mode:::
 
@@ -36,18 +43,16 @@ Clone the repository and install the package in development mode:::
     python3 setup.py develop
 
 
-
 Running the tests
-=================
+-----------------
 
 ::
 
     python3 setup.py test
 
 
-
 Running the typechecker
-=======================
+-----------------------
 
 Install the ``mypy-lang`` package first (e.g. ``pip3 install mypy-lang``).
 To run the typechecker::
