@@ -103,6 +103,7 @@ class Dlvhex2Solver(Solver):
                 return AnswerSetParserIterable(lines)
             except:
                 process.kill()
+                process.wait()  # need to wait for the process to exit to prevent ResourceWarning on Python 3.6+
                 # Close streams to prevent ResourceWarnings
                 process.stdin.close()
                 process.stdout.close()
