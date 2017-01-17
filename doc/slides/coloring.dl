@@ -1,0 +1,9 @@
+%!  INPUT (Set<Node> nodes, Set<Edge> edges) {
+%!      node(n.label) for n in nodes;
+%!      edge(e.first.label, e.second.label) for e in edges; }
+%!  OUTPUT {
+%!      colored_nodes = set {
+%!          query: color(X, C);
+%!          content: ColoredNode(X, C); }; }
+color(X, red) v color(X, green) v color(X, blue) :- node(X).
+:- edge(X, Y), color(X, C), color(Y, C).

@@ -31,6 +31,10 @@ Usage
 
 Stand-alone examples can be found in `the examples directory <https://github.com/hexhex/py-aspio/tree/master/examples>`_.
 
+Further explanation: `Using py-aspio (slides) <https://raw.githubusercontent.com/hexhex/py-aspio/master/doc/slides/using_py-aspio.pdf>`_.
+
+.. Further, refer to paper at... (TODO: add link when published)
+
 
 
 Development of py-aspio itself

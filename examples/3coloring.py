@@ -10,7 +10,7 @@ aspio.log.setLevel(logging.DEBUG)
 
 Node = namedtuple('Node', ['label'])
 ColoredNode = namedtuple('ColoredNode', ['label', 'color'])
-Arc = namedtuple('Arc', ['start', 'end'])
+Edge = namedtuple('Edge', ['first', 'second'])
 
 aspio.register_dict(globals())
 
@@ -25,22 +25,22 @@ def main():
     b = Node('b')
     c = Node('c')
     nodes = {a, b, c}
-    arcs = {
-        Arc(a, b),
-        Arc(a, c),
-        Arc(b, c)
+    edges = {
+        Edge(a, b),
+        Edge(a, c),
+        Edge(b, c)
     }
 
     # Iterate over all answer sets
-    for result in prog.solve(nodes, arcs):
+    for result in prog.solve(nodes, edges):
         print(result.colored_nodes)
 
     # A shortcut if only one output variable is needed
-    for colored_nodes in prog.solve(nodes, arcs).each_colored_nodes:
+    for colored_nodes in prog.solve(nodes, edges).each_colored_nodes:
         print(colored_nodes)
 
     # Compute a single answer set, or return None if no answer set exists
-    result = prog.solve_one(nodes, arcs)
+    result = prog.solve_one(nodes, edges)
     if result is not None:
         print(result.colored_nodes)
         print(result.labels_by_color)

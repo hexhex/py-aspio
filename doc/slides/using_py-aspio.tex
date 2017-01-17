@@ -1,0 +1,713 @@
+% vim:ft=tex:
+%
+\RequirePackage[l2tabu, orthodox]{nag}
+\documentclass[%
+beamer,%
+english,%
+% notes=only,% uncomment to print only notes
+10pt,%
+]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{listings}
+\usepackage{lstautogobble}
+\usepackage{graphicx}
+% \usepackage{caption}
+% \usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{booktabs} % Allows the use of \toprule, \midrule and \bottomrule in tables
+\usepackage{pifont}
+\usepackage{soul}
+
+% Turn off navigation symbols in the bottom right corner
+\setbeamertemplate{navigation symbols}{}
+
+% \usepackage{pgfpages}
+% \setbeameroption{show notes on second screen}
+
+\useoutertheme{infolines}
+\useinnertheme{rectangles}
+\usecolortheme{dolphin}
+\usecolortheme{rose}
+
+\setbeamertemplate{footline}[frame number]		% footline displays only frame number
+\beamertemplatenavigationsymbolsempty	% deactivates navigation bar
+
+\usefonttheme[onlymath]{serif}
+% typeset math in times
+\usepackage{times}
+% typeset text in helvetica
+\usepackage[scaled]{helvet}
+
+\title{Using py-aspio}
+% \author{}
+% \date{}
+
+% TODO:
+% Move ad-hoc settings on listings environments to the global setting
+% (problem: how to reduce font size of listings without affecting inline listings?)
+% => use \lst@ifdisplaystyle\color{blue}\fi -- see http://tex.stackexchange.com/a/268971
+% Also, add keywords for the annotation language
+\lstset{showstringspaces=false,
+    % basicstyle=\ttfamily\footnotesize,
+    % basicstyle=\footnotesize,
+    keywordstyle=\bfseries
+}
+
+\definecolor{darkgreen}{rgb}{0,0.5,0}
+
+\newcommand{\blue}[1]{{\color{blue}#1}}
+\newcommand{\red}[1]{{\color{red}#1}}
+\newcommand{\orange}[1]{{\color{orange}#1}}
+\newcommand{\darkgreen}[1]{{\color{darkgreen}#1}}
+
+
+\AtBeginSection[]
+{
+   \begin{frame}
+       \frametitle{Outline}
+       \tableofcontents[currentsection]
+   \end{frame}
+}
+
+
+\begin{document}
+
+\setlength{\abovedisplayskip}{0pt plus 3pt minus 9pt}
+\setlength{\abovedisplayshortskip}{0pt plus 3pt minus 9pt}
+\setlength{\belowdisplayskip}{0pt plus 3pt minus 9pt}
+\setlength{\belowdisplayshortskip}{0pt plus 3pt minus 9pt}
+
+\begin{frame}
+    \titlepage{}
+\end{frame}
+
+
+\section{Motivation and General Approach}
+
+\begin{frame}
+    \frametitle{Motivation}
+
+    \begin{block}{Answer Set Programming}
+        \begin{itemize}
+            \item Answer Set Programming (ASP) is a declarative programming paradigm~\cite{gelf-lifs-91}.
+            \item Applications:~\emph{workforce management}~\cite{DBLP:journals/tplp/RiccaGAMLIL12}, \emph{generating holiday plans for tourists}~\cite{DBLP:conf/lpnmr/IelpaILR09},
+                for many others cf.~\cite{DBLP:journals/aim/ErdemGL16}.
+        \end{itemize}
+    \end{block}
+
+    \begin{alertblock}{Limitations}
+        \begin{itemize}
+            \item Typical end-user applications contain components which cannot be (easily) solved in ASP:
+                \begin{itemize}
+                    \item graphical user interfaces
+                    \item presentation of results
+                    \item interfaces to data sources
+                    \item etc.
+                \end{itemize}
+            \item Realizing such components is in the domain of traditional object-oriented (OOP) languages.
+        \end{itemize}
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Motivation}
+
+    \begin{block}{Typical approach}
+        \begin{itemize}
+            \item Use ASP programs as \blue{components of a larger application}.
+            \bigskip
+            \item The ASP program solves the \blue{core computational problem}, while other components are implemented in an \blue{object-oriented language}.
+            \bigskip
+            \item To this end, object-oriented code
+                \begin{enumerate}
+                    \item adds input as facts,
+                    \item evaluates the ASP program, and
+                    \item interprets the answer sets.
+                \end{enumerate}
+            \bigskip
+            \item \textcolor{red}{But:} An implementation from scratch is similar for most applications $\Rightarrow$ repetitive work.
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Evaluating ASP Programs from Object-Oriented Code}
+
+    \begin{block}{Overview}
+        \begin{itemize}
+            \item We want to use ASP programs similarly to \blue{subprocedures}: \\
+                an ASP program $P$ performs a computation over input parameters $v_1, \ldots, v_n$, and each answer set should correspond to a solution object.
+                % $\Rightarrow \blue{P.\mathit{solve}(v_1,\dots,v_n)}$ should return a set of objects (=problem solutions).
+            \bigskip
+            \item Approach: the ASP program is \blue{annotated} with \blue{input/output specifications}. \\
+                Annotations are added as \blue{special comments} of form \blue{\tt \%!} to the ASP code.
+            \bigskip
+            \item \blue{py-aspio} is a Python library for \blue{evaluating} (``calling'')
+                such an annotated program from Python code:
+                \begin{itemize}
+                    \item it takes an \blue{annotated ASP program} and a \blue{list of input parameters} (objects) as input, and
+                    \item returns a \blue{set of objects} (corresponding the results of the ASP program).
+                \end{itemize}
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% \begin{frame}
+%     \frametitle{Evaluating ASP Programs from Object-Oriented Code}
+
+%     \begin{block}{Evaluation}
+%         More precisely, the interpreter library performs the following tasks:
+%         \begin{enumerate}
+%             \item
+%                 Parameters $v_1,\dots,v_n$ are converted to facts according to \blue{input specification $\iota$}.
+%             \item
+%                 These facts along with the ASP program $P$ are passed to the ASP solver.
+%             \item
+%                 The answer sets are mapped to objects $O$ according to \blue{output specification $\omega$}.
+%         \end{enumerate}
+%         \blue{$\Rightarrow \mathit{eval}(P, v_1,\dots,v_n) = \{ \mathit{mapOutput}(\omega, I) | I \in \mathit{AS}(P \cup \mathit{genFacts}(\iota, v_1,\dots,v_n)) \}$}.
+%     \end{block}
+
+%     \begin{block}{Language independence}
+%         \begin{itemize}
+%             \item The specification language is \blue{largely independent} of a concrete OOP language \\
+%                 $\Rightarrow$ porting the interpreter library to other OOP languages is easily possible. \\
+%                 $\Rightarrow$ the same annotated program can be used with \blue{multiple OOP languages}.
+%             \item Currently, we provide a prototypical implementation \blue{py-aspio} for Python.
+%         \end{itemize}
+%     \end{block}
+% \end{frame}
+
+\begin{frame}[allowframebreaks,fragile]{3-Colorability}
+    To give an overview over the usage of py-aspio,
+    we show an example implementation of the 3-colorability problem:
+    \begin{itemize}
+        \item Given a graph as input
+        \item assign to each node a color (red, green, or blue), such that
+        \item any two adjacent nodes have \blue{different} colors.
+    \end{itemize}
+    \bigskip
+
+    The graph in the Python code is represented by sets of nodes and edges:
+    \begin{itemize}
+        \item
+            Nodes are represented by the class \blue{\lstinline{Node}}, where
+            the attribute \blue{\lstinline{label}} is a unique string identifiying the node, and
+        \item
+            edges are represented by the class \blue{\lstinline{Edge}}, where
+            the attributes \blue{\lstinline{first}} and \blue{\lstinline{second}} are the nodes at both ends of the edge.
+    \end{itemize}
+
+    \framebreak
+
+    \begin{exampleblock}{coloring.dl (ASP code and input/output specification)}
+        \lstinputlisting[basicstyle=\footnotesize]{coloring.dl}
+    \end{exampleblock}
+    This program can be called with two parameters of types
+    \blue{\lstinline{Set<Node>}} and \blue{\lstinline{Set<Edge>}}
+    (i.e., any \lstinline{set}-like collection containing instances of the classes \blue{\lstinline{Node}} and \blue{\lstinline{Edge}}, respectively).
+    \\
+    Its output is of type \blue{\lstinline{Set<ColoredNode>}} (by default, a \lstinline{frozenset} containing instances of \lstinline{ColoredNode}).
+
+    \framebreak
+
+    The Python program first defines the data-holding classes and registers them with py-aspio.
+    \begin{exampleblock}{coloring.py (executable Python program)}
+        \lstinputlisting[escapechar=`,basicstyle=\footnotesize,language=python]{coloring-part1.py}
+    \end{exampleblock}
+
+    \framebreak
+
+    Then the ASP program is loaded and evaluated in different ways.
+    \begin{exampleblock}{coloring.py (cont'd)}
+        \lstinputlisting[escapechar=`,basicstyle=\footnotesize,language=python]{coloring-part2.py}
+    \end{exampleblock}
+\end{frame}
+%% NOTE: \end{frame} must be at beginning of line if the frame is [fragile]!! (also, nothing else may be on that line)
+
+\begin{frame}{Further examples}
+    The 3-Colorability example and others can be found in the ``examples'' directory of the py-aspio repository:
+    \url{https://github.com/hexhex/py-aspio/tree/master/examples}
+\end{frame}
+
+
+
+\section{Input Specification}
+
+\begin{frame}[fragile]{Input Specification}
+    Consists of two parts:
+    \begin{itemize}
+        \item
+            The \blue{parameter list} defines what input is expected from the Python program.
+        \item
+            The \orange{predicate specifications} control how atoms are generated from the input data.
+    \end{itemize}
+
+    \bigskip
+
+    In the example from before:
+    \begin{lstlisting}[escapechar=`,basicstyle=\footnotesize,autogobble,moredelim={**[is][\color{blue}]{@1}{@}},moredelim={**[is][\color{orange}]{@2}{@}}]
+    %!  INPUT (@1Set<Node> nodes, Set<Edge> edges@) {
+    %!      @2node(n.label) for n in nodes;@
+    %!      @2edge(e.first.label, e.second.label) for e in edges;@
+    %!  }
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Input parameter list}
+    A comma-separated list of parameters, each of the form type followed by name, e.g. \blue{\lstinline{int x}} defines a parameter with name \blue{\lstinline{x}} of type \blue{\lstinline{int}}.
+
+    \bigskip
+
+    Available types: \\
+    \begin{tabular}{ll}
+        \blue{$\mathit{int}$}      & integers \\
+        \blue{$\mathit{str}$}      & character strings \\
+        \blue{$\mathit{Set} \langle T \rangle$}   & set containing elements of type $T$ \\
+        \blue{$\mathit{Sequence} \langle T \rangle$}   & list containing elements of type $T$ \\
+        \blue{$\mathit{Dictionary} \langle K, V \rangle$}   & dictionary with keys of type $K$ and values of type $V$ \\
+        \blue{$\mathit{Tuple} \langle T_1,\dots,T_n \rangle$}   & $n$-tuple with components of types $T_1,\dots,T_n$ \\
+        \blue{$\mathit{MyClass}$}, \dots   & user-defined classes \\
+    \end{tabular}
+
+    \bigskip
+
+    In py-aspio, i.e., the Python implementation of the specification language,
+    the actual types are not checked at runtime but serve as documentation.
+\end{frame}
+
+\begin{frame}[fragile]{Predicate specifications}
+    First part defines the form of generated facts.
+    Example:
+    \begin{lstlisting}[escapechar=`,basicstyle=\footnotesize,moredelim={**[is][\color{blue}]{@1}{@}},moredelim={**[is][\color{orange}]{@2}{@}},moredelim={**[is][\color{darkgreen}]{@3}{@}},moredelim={**[is][\color{red}]{@4}{@}}]
+    @1edge@(@2e@@3.first.label@, @2e@@3.second.label@, @2e@@3.someIntArray@@4[3]@)
+    \end{lstlisting}
+    This will create facts of the form \blue{\lstinline{edge("node1", "node2", 27)}}.
+
+    \medskip
+    Available components:
+    \begin{itemize}
+        \item \blue{ASP predicate}
+        \item \orange{Variables}: input parameter or introduced by loop (next slide) % construct %(see next slide)
+        \item \darkgreen{Attribute access}
+        \item \red{Subscription} (currently only for integer subscripts)
+    \end{itemize}
+
+    \medskip
+    How are python objects mapped to ASP terms?
+    \begin{itemize}
+        \item \blue{\lstinline{int}}: Integer constant
+        \item \blue{\lstinline{str}}: Quoted string constant (special characters are escaped transparently by py-aspio)
+        % \item everything else: Call \blue{str(...)} on the object and then treat it like a string
+        \item Everything else is converted to \blue{str} first
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Iteration}
+    Second part of predicate specification allows iteration over \darkgreen{collections}.
+    Example:
+    \begin{lstlisting}[escapechar=`,mathescape,basicstyle=\footnotesize,moredelim={**[is][\color{blue}]{@1}{@}},moredelim={**[is][\color{orange}]{@2}{@}},moredelim={**[is][\color{darkgreen}]{@3}{@}},moredelim={**[is][\color{red}]{@4}{@}}]
+        p(...) for $\orange{x_1}$ in $\darkgreen{y_1}$ ... for $\orange{x_k}$ in $\darkgreen{y_k}$.
+    \end{lstlisting}
+    % @1edge@(@2e@@3.first.label@, @2e@@3.second.label@, @2e@@3.someIntArray@@4[3]@)
+
+    \orange{Loop variables $x_i$} must be new %(no shadowing allowed)
+    and refer to elements
+    of \darkgreen{collections $y_i$} \\
+    (the $\darkgreen{y_i}$s consist of variables plus attribute access and subscription).
+
+    \medskip
+    Evaluated from left to right (same as list comprehensions in Python),
+    meaning a variable $\orange{x_i}$ can be used in all $\darkgreen{y_j}$ to the right ($\darkgreen{y_{i+1}},\dots,\darkgreen{y_k}$),
+    allowing for nested iteration.
+
+    \medskip
+    Value of the \orange{loop variables}:
+    \begin{itemize}
+        \item If $\darkgreen{y_i}$ is a set, $\orange{x_i}$ will loop over all elements of $\darkgreen{y_i}$.
+        \item If $\darkgreen{y_i}$ is a sequence, $\orange{x_i}$ will loop over all $(\mathit{index},\mathit{element})$ pairs of $\darkgreen{y_i}$.
+        \item If $\darkgreen{y_i}$ is a dictionary, $\orange{x_i}$ will loop over all $(\mathit{key},\mathit{value})$ pairs of $\darkgreen{y_i}$.
+    \end{itemize}
+
+    \medskip
+    What do \blue{set}, \blue{sequence}, \blue{dictionary} mean in Python?
+
+    $\rightarrow$ Any classes that implement the abstract base classes \blue{collections.abc.Set}, \blue{collections.abc.Sequence}, \blue{collections.abc.Mapping}, respectively!
+\end{frame}
+
+\begin{frame}[fragile]{Shortcuts}
+    \begin{itemize}
+        \item Iterating over a sequence (e.g., a \blue{list} instance) produces $(\mathit{index},\mathit{element})$ pairs
+            $\Rightarrow$ index and element can be accessed with subscripts \blue{\lstinline{x[0]}} and \blue{\lstinline{x[1]}}
+
+        \item Shortcut:
+            use list of variables $\orange{x_1,\dots,x_n}$ instead of single iteration variable $\orange{x}$
+            $\Rightarrow$ write \blue{\lstinline{for (i,v) in y}} instead of \blue{\lstinline{for x in y}} for a sequence \blue{\lstinline{y}}
+            to access components directly
+
+        \item Analogously for dictionaries and $(\mathit{key},\mathit{value})$-pairs.
+
+        \item This shortcut can also be used for \blue{tuples}.
+    \end{itemize}
+    % Iterating over sequences (e.g., \blue{list} instances) will produce $(\mathit{index},\mathit{element})$-pairs.
+    % The index and element can be accessed with subscripts \blue{\lstinline{x[0]}} and \blue{\lstinline{x[1]}}, respectively, where \blue{\lstinline{x}} is the loop variable.
+
+    % Analogously for dictionaries and $(\mathit{key},\mathit{value})$-pairs.
+
+    % To improve readability, it is possible to use a list of variables $\orange{(x_1,\dots,x_n)}$ in place of a single iteration variable $\orange{x}$.
+    % For instance, an iteration \blue{\lstinline{for x in y}} over the key-value pairs of the dictionary \blue{\lstinline{y}} may also be written as: \blue{\lstinline{for (k,v) in y}}.
+
+    \begin{example}
+        % Consider the following input specification:
+        \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+        INPUT (Sequence<Tuple<int, int>> readings) {
+            temperature(x[0], x[1][0]) for x in readings;
+            humidity(t, hum) for (t,(temp,hum)) in readings;
+        }
+        \end{lstlisting}
+        The specification of \lstinline{temperature} uses subscripts to access the components,
+        while the specification of \lstinline{humidity} assigns the values directly to different variables.
+    \end{example}
+
+    Additionally, the underscore \blue{\lstinline{_}} serves as \emph{don't care} variable to ignore unneeded values.
+\end{frame}
+
+
+
+\section{Output Specification}
+
+\begin{frame}[fragile]{Output Specification}
+    % The output specification defines how answer sets are mapped back to objects.
+    % \medskip
+    Enables access to results of the ASP program:
+
+    \begin{itemize}
+        \item Each answer set is mapped to a single result object.
+        \item The output specification defines one or more attributes for the result object by referring to the answer set.
+    \end{itemize}
+
+    \medskip
+    Syntactically, it is just a list of assignments of the form ``\blue{name} = \orange{object}''.
+
+    \begin{exampleblock}{Example}
+        \begin{lstlisting}[escapechar=`,basicstyle=\footnotesize,autogobble,moredelim={**[is][\color{blue}]{@1}{@}},moredelim={**[is][\color{orange}]{@2}{@}}]
+        %!  OUTPUT {
+        %!      @1labels@ = @2set { query: label(X); content: X; }@;
+        %!  }
+        \end{lstlisting}
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}{Expressions overview}
+    The objects on the right-hand side can be built from the following types of expressions:
+    \begin{itemize}
+        \item Integer constants, e.g. \blue{0}, \blue{123}, \blue{-5}, \dots
+        \item String constants, e.g. \blue{"hello"}, \blue{"one\textbackslash{}ntwo"}, \dots
+        \item Tuples: \blue{$(e_1,e_2,\dots,e_n)$} with subexpressions $e_1,\dots,e_n$
+        \item Instantiating user-defined classes: \blue{$\textit{MyClass}\,(e_1,e_2,\dots,e_n)$}
+        \item Sets: \blue{$\text{set}~\{~\text{query:}~q;~\text{content:}~e;\}$}
+        \item Shortcuts for sets: \blue{$\text{set}~\{~p/n~\}$} and \blue{$\text{set}~\{~p/n~\lstinline{->}~\textit{MyClass}~\}$}
+        \item Sequences/lists: \blue{$\text{sequence}~\{~\text{query:}~q;~\text{index:}~i;~\text{content:}~e;\}$}
+        \item Dictionaries: \blue{$\text{dictionary}~\{~\text{query:}~q;~\text{key:}~k;\text{content:}~e;\}$}
+        \item Variables (after being introduced by a \blue{query}): \blue{X}, \blue{Y}, \blue{Color}, \dots
+        \item References: \blue{\&\textit{name}}
+    \end{itemize}
+    % \bigskip
+    % More details on the following slides.
+\end{frame}
+
+\begin{frame}[fragile,allowframebreaks]{Collection Expressions}
+    Collections expressions use a query $q$ to access the answer set. \\
+    There are three types:
+    \begin{itemize}
+        \item \blue{$\text{set}~\{~\text{query:}~q;~\text{content:}~e;\}$}
+        \item \blue{$\text{sequence}~\{~\text{query:}~q;~\text{index:}~i;~\text{content:}~e;\}$}
+        \item \blue{$\text{dictionary}~\{~\text{query:}~q;~\text{key:}~k;\text{content:}~e;\}$}
+    \end{itemize}
+
+    \medskip
+    The query $q$ is a list of (possibly non-ground) ASP literals that are to be matched against the answer set.
+    Any variables introduced by (non-ground literals in) the query $q$ can be used in the expressions $e$, $i$, $k$.
+
+    Every match of the query yields an element of the collection, with any ASP variables introduced in $q$ replaced by their matched values.
+    \begin{itemize}
+        \item The \blue{content} $e$ is an expression that defines the elements of the collection.
+        \item In case of a sequence, the \blue{index} $i$ (must be a variable) determines the position of the element.
+            The values of $i$ over all matches must form a consecutive range of integers without gaps or duplicates.
+        \item In case of a dictionary, the \blue{key} $k$ determines the key of the element.
+            As $e$, the key can be any expression.
+    \end{itemize}
+
+    Note that in Python, set elements and dictionary keys must be \href{https://docs.python.org/3/reference/datamodel.html#object.__hash__}{hashable}.
+
+    \framebreak
+
+    \begin{example}
+        Consider the following output specification:
+        \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+        OUTPUT {
+            labels = set { query: vertex(X); content: X; };
+            red_nodes = set { query: color(X, red); content: X; };
+        }
+        \end{lstlisting}
+        It defines two attributes, \blue{\lstinline{labels}} and \blue{\lstinline{red_nodes}},
+        whose concrete values depend on the current answer set.
+        Now consider the answer set
+        \begin{align*}
+            I = \{ & \mathit{vertex}(a), \mathit{vertex}(b), \mathit{vertex}(c), \mathit{edge}(a,b), \mathit{edge}(a,c), \\
+                    & \mathit{color}(a, \mathit{blue}), \mathit{color}(b, \mathit{red}), \mathit{color}(c, \mathit{red}) \}.
+        \end{align*}
+        % For this answer set:
+        % \begin{itemize}
+        %     \item
+                The query \blue{\lstinline{vertex(X)}} matches all atoms of the predicate $\mathit{vertex}$,
+                thus \blue{\lstinline{labels}} will have the value \lstinline[language=python]|{"a", "b", "c"}|.
+            % \item
+
+                The query \blue{\lstinline{color(X, red)}} has a constant as second argument,
+                which means only atoms with this value are matched, here: $\mathit{color}(b, \mathit{red})$ and $\mathit{color}(c, \mathit{red})$.
+                The value of \blue{\lstinline{red_nodes}} will be \lstinline[language=python]|{"b", "c"}|.
+        % \end{itemize}
+    \end{example}
+
+    \framebreak
+    \begin{itemize}
+        \item Since the query refers to elements of the ASP code, the same naming conventions apply:
+            words starting with an upper-case letter are variables,
+            and words starting with a lower-case letter are constant symbols.
+            % variables start with an upper-case letter, and constants 
+        \item Note that for consistency, all variable values are strings.
+            If an integer value is required, use \blue{\lstinline{int(X)}} instead of \blue{\lstinline{X}}.
+            The only exception is the \blue{index} clause in sequence expressions, which is always interpreted as an integer.
+        \item
+            As in ordinary ASP, anonymous variables \blue{\lstinline{_}} can be used in the query.
+    \end{itemize}
+
+    \framebreak
+
+    \begin{exampleblock}{Nested collections}
+        Collection expressions can be nested.
+        The following extracts a dictionary that maps colors to the set of nodes with that color:
+        \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+        %!  OUTPUT {
+        %!      labels_by_color = dictionary {
+        %!          query: color(_, C);
+        %!          key: C;
+        %!          content: set { query: color(L, C); content: L; };
+        %!      };
+        %!  }
+        \end{lstlisting}
+        If this expression is evaluated under the answer set
+        \[ \{ \mathit{color}(a, \mathit{blue}), \mathit{color}(b, \mathit{red}), \mathit{color}(c, \mathit{red}) \}, \]
+        the dictionary \blue{\lstinline{labels_by_color}} yields the mappings $\blue{\mathit{blue} \mapsto \{a\}}$ and $\blue{\mathit{red} \mapsto \{b,c\}}$.
+        Note that the variable~\blue{C} is introduced in the dictionary expression.
+        For every match of its query \blue{\lstinline{color(_, C)}},
+        the nested set expression is evaluated with \blue{C} fixed to the matched value,
+        thus generating a set of labels colored by the color~\blue{C}.
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]{Shortcuts for Set Expressions}
+    % \begin{lstlisting}[escapechar=`,basicstyle=\footnotesize,autogobble,moredelim={**[is][\color{blue}]{@1}{@}},moredelim={**[is][\color{orange}]{@2}{@}}]
+    % OUTPUT {
+    %     vertices = set { query: vertex(X); content: X; };
+    %     edges = set { query: edge(X, Y); content: (X, Y); };
+    %     graph = Graph(&vertices, &edges);
+    % }
+    % \end{lstlisting}
+
+    \begin{itemize}
+        \item
+            \blue{$\text{set}~\{~p/n~\}$}
+            stands for
+            \blue{$\text{set}~\{~\text{query:}~p(X_1,\dots,X_n);~\text{content:}~(X_1,\dots,X_n);~\}$}
+        \item
+            \blue{$\text{set}~\{~p/n~\lstinline{->}~\textit{MyClass}~\}$}
+            stands for \\
+            \blue{$\text{set}~\{~\text{query:}~p(X_1,\dots,X_n);~\text{content:}~\textit{MyClass}(X_1,\dots,X_n);~\}$}
+    \end{itemize}
+
+    \begin{example}
+        \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+        OUTPUT {
+          labels = set { vertex/1 };
+          colored_nodes = set { color/2 -> ColoredNode };
+        }
+        \end{lstlisting}
+        is equivalent to
+        \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+        OUTPUT {
+          labels = set { query: vertex(X); content: X; };
+          colored_nodes = set { query: color(X, Y); content: ColoredNode(X, Y); };
+        }
+        \end{lstlisting}
+    \end{example}
+\end{frame}
+
+
+
+\section{Python Interface}
+
+\begin{frame}[fragile]{Loading the ASP Program}
+    ASP programs are represented by the class \blue{Program}.
+
+    % Load programs from files or strings:
+    Programs can be loaded from files or strings:
+    \begin{lstlisting}[basicstyle=\footnotesize,language=python]
+    import aspio
+    prog1 = aspio.Program(filename='aspfile.dl')
+    prog2 = aspio.Program(code=r'''
+        a :- not b.
+        b :- not a.
+    ''')
+    prog3 = aspio.Program()  # empty program
+    \end{lstlisting}
+
+    To merge ASP code from multiple sources:
+    \begin{lstlisting}[basicstyle=\footnotesize,language=python]
+    prog.append_file('anotherfile.dl')
+    prog.append_code('c :- b.')
+    \end{lstlisting}
+
+    The input and output specifications are extracted automatically.
+    However, note that one program may contain \blue{at most one input specification} and \blue{at most one output specification}.
+\end{frame}
+
+\begin{frame}{Evaluating the ASP Program}
+    Two methods for evaluating a program $p$:
+    \begin{itemize}
+        \item \blue{prog.solve(\dots)}:
+            Returns an iterable allowing to iterate over \blue{all answer sets} of the program.
+            Note that due to the semantics of ASP, the concrete order of the returned objects has no meaning!
+        \item \blue{prog.solve\textunderscore{}one(\dots)}:
+            Returns the \blue{first answer set} found by the solver, or \blue{\lstinline{None}} if the program does not have any answer sets.
+    \end{itemize}
+
+    The positional arguments of these methods are the parameters defined by the input specification.
+
+    The answer sets are represented by instances of the class \blue{Result}.
+    These objects have attributes as defined by the output specification (see next slide).
+
+    \bigskip
+    Additional keyword arguments:
+    \begin{itemize}
+        \item \blue{options}: specify additional options to pass to the solver (more details later).
+        \item \blue{solver}: specify the ASP solver to use. Currently, only \href{http://www.kr.tuwien.ac.at/research/systems/dlvhex/}{dlvhex} is supported.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Working with the Output of an ASP Program}
+    % Consider the input/output specifications of the 3-Colorability example from the introduction (with parts omitted):
+    Consider the annotations of the 3-Colorability example (with parts omitted):
+    \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+    %!  INPUT (Set<Node> nodes, Set<Edge> edges) { ... }
+    %!  OUTPUT { colored_nodes = set { ... }; }
+    \end{lstlisting}
+    % Consider the output specification of the 3-Colorability example (part omitted):
+    % \begin{lstlisting}[basicstyle=\footnotesize,autogobble]
+    % %! OUTPUT { colored_nodes = set { ... }; }
+    % \end{lstlisting}
+
+    According to the input specification, the evaluation requires two arguments.
+
+    \begin{itemize}
+        \item
+            Use the method \blue{\lstinline{solve}} to iterate over all answer sets.
+            The collection returned by \blue{solve} contains one object per answer set,
+            with attributes as defined in the output specification:
+            \begin{lstlisting}[basicstyle=\footnotesize,autogobble,language=python]
+            for result in prog.solve(nodes, edges):
+                print(result.colored_nodes)
+            \end{lstlisting}
+            A shortcut if only one attribute is needed (note the required prefix \blue{\lstinline{each_}}):
+            \begin{lstlisting}[basicstyle=\footnotesize,autogobble,language=python]
+            for cns in prog.solve(nodes, edges).each_colored_nodes:
+                print(cns)
+            \end{lstlisting}
+        \item
+            Use the method \blue{\lstinline{solve_one}} if only a single arbitrary answer set is needed,
+            or if only the consistency of the program is of interest:
+            \begin{lstlisting}[basicstyle=\footnotesize,autogobble,language=python]
+            result = prog.solve_one(nodes, edges)
+            if result is not None: print(result.colored_nodes)
+            else: print("no answer set exists")
+            \end{lstlisting}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Solver Options}
+    Instance of class \blue{SolverOptions} with the following attributes:
+    \begin{itemize}
+        \item \blue{\lstinline{max_answer_sets}}:
+            Set to an integer $n$ to compute at most $n$ answer sets,
+            or to \blue{None} to compute all (default: None).
+        \item \blue{\lstinline{max_int}}:
+            Set maximum integer value (may be necessary for arithmetic).
+        \item \blue{\lstinline{capture}}:
+            A list of strings; the names of predicates that should be captured
+            (in addition to the output specification).
+            The captured data is available through the attribute \blue{\lstinline{answer_set}} of the class \blue{Result} (cf.~below example).
+        \item \blue{\lstinline{custom}}:
+            A list of strings; any custom options that are to be passed to the solver subprocess.
+    \end{itemize}
+    \begin{example}%{Example}
+        The following snippet show how to evaluate an ASP program with the \lstinline{max_int} option set to 25,
+        and accessing the raw data of predicate p:
+        \begin{lstlisting}[basicstyle=\footnotesize,language=python,autogobble]
+            prog = aspio.Program(...)
+            opts = aspio.SolverOptions(max_int=25, capture=['p'])
+            for result in prog.solve(input1, input2, options=opts):
+                ps = result.answer_set['p']  # type: Iterable[Tuple[str, ...]]
+        \end{lstlisting}
+    \end{example}
+\end{frame}
+
+\begin{frame}[fragile]{User-defined Classes in Output}
+    User-defined classes that are to be used in an output specification, either
+    \begin{itemize}
+        \item must be fully qualified (e.g., \blue{package.module.MyClass}), or
+        \item have to be \blue{registered with py-aspio} as described below.
+    \end{itemize}
+
+    \medskip
+    There are three methods to register classes for a program \lstinline{prog}:
+    \begin{itemize}
+        \item
+            Pass the constructor and its name to the method \blue{register}:
+            \begin{lstlisting}[basicstyle=\footnotesize,language=python,autogobble]
+            prog.register(MyClass, 'MyClass')
+            \end{lstlisting}
+        \item
+            If the name is missing, the constructor's attribute \blue{\lstinline{__name__}} is used:
+            \begin{lstlisting}[basicstyle=\footnotesize,language=python,autogobble]
+            prog.register(MyClass)
+            \end{lstlisting}
+        \item
+            Or simply register all callable objects in the current global scope:
+            \begin{lstlisting}[basicstyle=\footnotesize,language=python,autogobble]
+            prog.register_dict(globals())
+            \end{lstlisting}
+    \end{itemize}
+
+    \medskip
+    Alternatively, these methods may be called on the \blue{aspio} module
+    in order to register classes globally (i.e., for all ASP programs in the current application):
+    \begin{lstlisting}[basicstyle=\footnotesize,language=python,autogobble]
+    import aspio
+    aspio.register(MyClass)
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[allowframebreaks]
+    \frametitle{References}
+
+    \footnotesize
+    \bibliographystyle{apalike}
+    \bibliography{using_py-aspio}
+\end{frame}
+
+\end{document}

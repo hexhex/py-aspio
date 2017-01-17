@@ -1,6 +1,6 @@
-%!  INPUT (Set<Node> nodes, Set<Arc> arcs) {
+%!  INPUT (Set<Node> nodes, Set<Edge> edges) {
 %!      node(n.label) for n in nodes;
-%!      edge(arc.start.label, arc.end.label) for arc in arcs;
+%!      edge(e.first.label, e.second.label) for e in edges;
 %!  }
 
 %!  OUTPUT {
